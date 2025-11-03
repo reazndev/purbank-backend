@@ -30,6 +30,9 @@ public class MobileDevice {
     @Column(nullable = false)
     private String status = "ACTIVE";
 
+    @Column(name = "last_used_at", nullable = false, updatable = false)
+    private LocalDateTime lastUsedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
