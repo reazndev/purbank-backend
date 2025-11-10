@@ -1,0 +1,118 @@
+name: Feature Request
+description: Create a new feature request with structured information
+title: "[Feature]: "
+labels: ["needs-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+        Please fill out the sections below to describe your feature request.
+  
+  - type: textarea
+    id: reasons
+    attributes:
+      label: Reasons
+      description: Why is this feature needed? What problem does it solve?
+      placeholder: Explain the motivation behind this feature...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: how
+    attributes:
+      label: How
+      description: How should this feature work? Describe the expected behavior.
+      placeholder: Describe how the feature should function...
+    validations:
+      required: true
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## API Design (Optional)
+  
+  - type: textarea
+    id: api-endpoint
+    attributes:
+      label: Endpoint
+      description: Define the API endpoint(s)
+      placeholder: |
+        GET /api/v1/resource
+        POST /api/v1/resource
+      render: shell
+    validations:
+      required: false
+  
+  - type: textarea
+    id: api-request
+    attributes:
+      label: Request Format
+      description: Define the request structure
+      placeholder: |
+        {
+          "field": "value",
+          "nested": {
+            "key": "value"
+          }
+        }
+      render: json
+    validations:
+      required: false
+  
+  - type: textarea
+    id: api-response
+    attributes:
+      label: Response Format
+      description: Define the response structure
+      placeholder: |
+        {
+          "success": true,
+          "data": {}
+        }
+      render: json
+    validations:
+      required: false
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Acceptance Criteria (Optional)
+  
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What conditions must be met for this feature to be considered complete?
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: false
+  
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Additional Information (Optional)
+  
+  - type: textarea
+    id: extra-info
+    attributes:
+      label: Extra Information
+      description: Any additional context, screenshots, or references
+      placeholder: Add any extra information here...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: technical-notes
+    attributes:
+      label: Technical Notes
+      description: Implementation details, dependencies, or technical considerations
+      placeholder: Technical considerations...
+    validations:
+      required: false
