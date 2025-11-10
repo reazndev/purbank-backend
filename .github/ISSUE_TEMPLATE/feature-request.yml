@@ -41,7 +41,7 @@ body:
       placeholder: |
         GET /api/v1/resource
         POST /api/v1/resource
-      render: shell
+      render: markdown
     validations:
       required: false
   
