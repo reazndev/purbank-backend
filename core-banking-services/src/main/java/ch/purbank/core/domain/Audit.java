@@ -20,22 +20,22 @@ public class Audit {
     @Column(nullable = false)
     private String action;
 
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id", nullable = true)
     private String userId;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;
 
-    @Column(name = "calling_class")
+    @Column(name = "calling_class", nullable = true)
     private String callingClass;
 
-    @Column(name = "calling_method")
+    @Column(name = "calling_method", nullable = true)
     private String callingMethod;
 
-    @Column(name = "ip_address")
+    @Column(name = "ip_address", nullable = true)
     private String ipAddress;
 
-    @Column(name = "user_agent")
+    @Column(name = "user_agent", nullable = true)
     private String userAgent;
 
     @PrePersist
