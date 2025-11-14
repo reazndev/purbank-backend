@@ -1,6 +1,7 @@
 package ch.purbank.core.service.impl;
 
 import ch.purbank.core.domain.Audit;
+import ch.purbank.core.exception.AuditNotFoundException;
 import ch.purbank.core.repository.AuditRepository;
 import ch.purbank.core.service.AuditService;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.lang.Nullable;
+import ch.purbank.core.exception.AuditNotFoundException;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +38,9 @@ public class AuditServiceImpl implements AuditService {
     @SuppressWarnings("null")
     public Audit viewAuditById(UUID auditId) {
 
-        return auditRepository.getReferenceById(auditId);
+        return auditRepository.findById(auditId)
+                .orElseThrow(() -> new AuditNotFoundException(auditId));
+
     }
 
     @Override
