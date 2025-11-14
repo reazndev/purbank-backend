@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import org.springframework.lang.Nullable;
+import java.util.UUID;
 
 @Entity
 @Table(name = "audit")
@@ -18,14 +19,14 @@ public class Audit {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private java.util.UUID id;
+    private UUID id;
 
     @Column(nullable = false)
     private String action;
 
     @Nullable
     @Column(name = "user_id", nullable = true)
-    private java.util.UUID userId;
+    private UUID userId;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;

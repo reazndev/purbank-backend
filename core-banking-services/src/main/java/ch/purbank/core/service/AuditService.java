@@ -1,7 +1,6 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.Audit;
-import ch.purbank.core.repository.AuditRepository;
 import org.springframework.lang.Nullable;
 
 import java.util.List;

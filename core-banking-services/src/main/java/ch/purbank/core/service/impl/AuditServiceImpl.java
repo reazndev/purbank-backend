@@ -16,6 +16,7 @@ public class AuditServiceImpl implements AuditService {
     private final AuditRepository auditRepository;
 
     @Override
+    @SuppressWarnings("null")
     public Audit createAudit(String action, @Nullable UUID userId, @Nullable String ipAddress,
             @Nullable String userAgent) {
         // Very basic here right now
@@ -32,6 +33,7 @@ public class AuditServiceImpl implements AuditService {
     }
 
     @Override
+    @SuppressWarnings("null")
     public Audit viewAuditById(UUID auditId) {
 
         return auditRepository.getReferenceById(auditId);
