@@ -21,7 +21,7 @@ public class Audit {
     private String action;
 
     @Column(name = "user_id", nullable = true)
-    private String userId;
+    private java.util.UUID userId;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;
