@@ -5,6 +5,7 @@ import ch.purbank.core.domain.RegistrationCodes;
 import ch.purbank.core.domain.User;
 import ch.purbank.core.domain.enums.EmailVerificationStatus;
 import ch.purbank.core.domain.enums.MobileDeviceStatus;
+import ch.purbank.core.domain.enums.RegistrationCodeStatus;
 import ch.purbank.core.repository.EmailVerificationRepository;
 import ch.purbank.core.repository.MobileDeviceRepository;
 import ch.purbank.core.repository.RegistrationCodesRepository;
@@ -51,7 +52,7 @@ public class RegistrationService {
         }
 
         Optional<RegistrationCodes> codeOpt = registrationCodesRepository
-                .findByRegistrationCodeAndStatus(registrationCode, "OPEN");
+                .findByRegistrationCodeAndStatus(registrationCode, RegistrationCodeStatus.OPEN);
 
         String resultToken = SecureTokenGenerator.generateToken(EMAIL_TOKEN_LENGTH);
 
