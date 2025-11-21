@@ -17,9 +17,38 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  mail:
+    host: ${MAIL_HOST:mail.hilfikernet.ch}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:no-reply@purbank.ch}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: ${MAIL_HOST:mail.hilfikernet.ch}
+          socketFactory:
+            port: 465
+            class: javax.net.ssl.SSLSocketFactory
+            fallback: false
+          connectiontimeout: 60000
+          timeout: 60000
+          writetimeout: 60000
+        debug: true 
+
 server:
   port: 8080
 
 logging:
   level:
     ch.purbank: DEBUG
+
+
+purbank:
+  mail:
+    from: no-reply@purbank.ch
+    from-name: Purbank
+    verification-subject: Verify Your Email - Purbank Registration
+    success-subject: Welcome to Purbank!
