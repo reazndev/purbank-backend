@@ -4,6 +4,7 @@ import ch.purbank.core.domain.EmailVerification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
@@ -15,7 +16,7 @@ public interface EmailVerificationRepository extends JpaRepository<EmailVerifica
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from EmailVerification e where e.emailVerifyToken = :token")
-    Optional<EmailVerification> findByEmailVerifyTokenForUpdate(String token);
+    Optional<EmailVerification> findByEmailVerifyTokenForUpdate(@Param("token") String token);
 
     Optional<EmailVerification> findByEmailVerifyToken(String emailVerifyToken);
 
