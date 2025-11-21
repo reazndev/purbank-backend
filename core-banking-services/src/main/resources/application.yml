@@ -36,7 +36,7 @@ spring:
           connectiontimeout: 60000
           timeout: 60000
           writetimeout: 60000
-        debug: true 
+        debug: ${MAIL_DEBUG:false}
 
 server:
   port: 8080
