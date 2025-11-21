@@ -24,13 +24,13 @@ public class User {
     @Column(nullable = false, name = "last_name")
     private String lastName;
 
-    @Column(nullable = false)
+    @Column(nullable = false, name = "contract_number")
     private String contractNumber;
 
     @Column(nullable = false)
     private String status = "ACTIVE";
 
-    @Column(nullable = false)
+    @Column(nullable = false, name = "created_at")
     private LocalDateTime createdAt;
 
     @PrePersist
