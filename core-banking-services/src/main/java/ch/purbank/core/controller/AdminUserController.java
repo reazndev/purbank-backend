@@ -26,7 +26,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<User> getUser(@PathVariable UUID userId) {
+    public ResponseEntity<User> getUser(@PathVariable("userId") UUID userId) {
         User u = adminUserService.getUser(userId);
         if (u == null)
             return ResponseEntity.notFound().build();
@@ -34,22 +34,22 @@ public class AdminUserController {
     }
 
     @PostMapping("/{userId}/registration")
-    public ResponseEntity<RegistrationCodes> createRegistrationCode(@PathVariable UUID userId,
-            @RequestParam String title,
-            @RequestParam(required = false) String description) {
+    public ResponseEntity<RegistrationCodes> createRegistrationCode(@PathVariable("userId") UUID userId,
+            @RequestParam("title") String title,
+            @RequestParam(value = "description", required = false) String description) {
         RegistrationCodes rc = adminUserService.createRegistrationCode(userId, title, description);
         return ResponseEntity.ok(rc);
     }
 
     @GetMapping("/{userId}/registration")
-    public ResponseEntity<List<RegistrationCodes>> listRegistrationCodes(@PathVariable UUID userId) {
+    public ResponseEntity<List<RegistrationCodes>> listRegistrationCodes(@PathVariable("userId") UUID userId) {
         List<RegistrationCodes> list = adminUserService.listRegistrationCodes(userId);
         return ResponseEntity.ok(list);
     }
 
     @DeleteMapping("/{userId}/registration/{codeId}")
-    public ResponseEntity<GenericStatusResponse> deleteRegistrationCode(@PathVariable UUID userId,
-            @PathVariable UUID codeId) {
+    public ResponseEntity<GenericStatusResponse> deleteRegistrationCode(@PathVariable("userId") UUID userId,
+            @PathVariable("codeId") UUID codeId) {
         boolean ok = adminUserService.deleteRegistrationCode(userId, codeId);
         return ResponseEntity.ok(new GenericStatusResponse(ok ? "OK" : "FAIL"));
     }
