@@ -1,0 +1,73 @@
+package ch.purbank.core.controller;
+
+import ch.purbank.core.domain.Payment;
+import ch.purbank.core.dto.*;
+import ch.purbank.core.service.PaymentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/payments")
+@RequiredArgsConstructor
+@Slf4j
+@Tag(name = "Payments", description = "Payment management endpoints")
+public class PaymentController {
+
+    private final PaymentService paymentService;
+
+    // TODO: Replace with actual user authentication from bearer token
+    private UUID getCurrentUserId() {
+        // For now you need to set the UUID here for testing.
+        return UUID.fromString("00000000-0000-0000-0000-000000000001");
+    }
+
+    @GetMapping
+    @Operation(summary = "List pending payments", description = "Gets all pending payments for the user, optionally filtered by konto")
+    public ResponseEntity<List<PaymentDTO>> listPayments(
+            @Parameter(description = "Optional konto ID filter", required = false) @RequestParam(required = false) UUID konto) {
+
+        UUID userId = getCurrentUserId();
+        List<PaymentDTO> payments = paymentService.getAllPendingPayments(userId, konto);
+        return ResponseEntity.ok(payments);
+    }
+
+    @PostMapping
+    @Operation(summary = "Create payment", description = "Creates a new payment. Instant payments require sufficient balance.")
+    public ResponseEntity<Payment> createPayment(
+            @Parameter(description = "Payment creation details", required = true) @Valid @RequestBody CreatePaymentRequestDTO request) {
+
+        UUID userId = getCurrentUserId();
+        Payment payment = paymentService.createPayment(userId, request);
+        return ResponseEntity.ok(payment);
+    }
+
+    @PatchMapping("/{paymentId}")
+    @Operation(summary = "Update payment", description = "Updates a pending payment (only if not locked)")
+    public ResponseEntity<GenericStatusResponse> updatePayment(
+            @Parameter(description = "Payment UUID", required = true) @PathVariable UUID paymentId,
+            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdatePaymentRequestDTO request) {
+
+        UUID userId = getCurrentUserId();
+        paymentService.updatePayment(userId, paymentId, request);
+        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+    }
+
+    @DeleteMapping("/{paymentId}")
+    @Operation(summary = "Cancel payment", description = "Cancels a pending payment (only if not locked)")
+    public ResponseEntity<GenericStatusResponse> cancelPayment(
+            @Parameter(description = "Payment UUID", required = true) @PathVariable UUID paymentId) {
+
+        UUID userId = getCurrentUserId();
+        paymentService.cancelPayment(userId, paymentId);
+        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+    }
+}

@@ -26,8 +26,7 @@ public class KontoController {
 
     // TODO: Replace with actual user authentication from bearer token
     private UUID getCurrentUserId() {
-        // For now, return a hardcoded UUID - this will be replaced with actual auth
-        // In production, extract user from JWT/bearer token
+        // For now you need to set the UUID here for testing.
         return UUID.fromString("00000000-0000-0000-0000-000000000001");
     }
 
