@@ -38,10 +38,10 @@ NOTE: you need to authenticate using a github token to pull as the repo is curre
 
 ## Docker builds
 Docker images of the backend get automatically built for:
-- the main branch (use :latest)
-- any branch (use :branchname)
-- any pr (if they have the label preview) (use :pr-name)
-also version tags, and specific tags too.
+- the main branch (use `:main` and `:latest`)
+- any other branch (use `:{branch-name}`)
+- any PR with the preview label (use `:pr-{number}`)
+- also version tags and specific tags as needed.
 
 ## Email Service
 
