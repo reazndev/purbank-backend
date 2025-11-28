@@ -44,7 +44,7 @@ public class User implements UserDetails {
     @Column(nullable = false, name = "contract_number")
     private String contractNumber;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String password;
 
     @Column(nullable = false)
