@@ -39,15 +39,20 @@ public class AuthenticationService {
 
     @Transactional
     public AuthenticationResponseDTO authenticate(AuthenticationRequestDTO request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
         var user = repository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        // Invalidate old refresh tokens on new login (Optional, usually good security
-        // practice)
-        // tokenRepository.deleteByUser(user);
+        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+
+        } else if (user.getPassword() == null || user.getPassword().isEmpty()) {
+            System.out.println("Passwordless user logged in via external validation (No password check enforced).");
+
+        } else {
+            throw new IllegalStateException("Authentication failed: Missing credentials for user role.");
+        }
 
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = createRefreshToken(user);
@@ -58,28 +63,21 @@ public class AuthenticationService {
                 .build();
     }
 
-    /**
-     * Handles the logic for:
-     * 1. 20-minute sliding window (updates expiry)
-     * 2. 12-hour absolute max age (checks createdAt)
-     */
     public AuthenticationResponseDTO refreshToken(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new IllegalArgumentException("Invalid Token format");
         }
 
-        final String refreshTokenStr = authHeader.substring(7); // "Bearer " is 7 chars
+        final String refreshTokenStr = authHeader.substring(7);
 
         RefreshToken refreshToken = tokenRepository.findByToken(refreshTokenStr)
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
 
-        // 1. Check if token is expired based on the 20-minute sliding window
         if (refreshToken.isExpired()) {
             tokenRepository.delete(refreshToken);
             throw new IllegalArgumentException("Refresh token expired (Inactivity)");
         }
 
-        // 2. Check absolute expiration (12 hours max life)
         long absoluteMaxAge = refreshToken.getCreatedAt().toEpochMilli() + absoluteExpirationMs;
         if (Instant.now().toEpochMilli() > absoluteMaxAge) {
             tokenRepository.delete(refreshToken);
@@ -88,10 +86,8 @@ public class AuthenticationService {
 
         User user = refreshToken.getUser();
 
-        // Generate new Access Token
         String accessToken = jwtService.generateToken(user);
 
-        // Slide the window: Update expiry date for another 20 minutes
         refreshToken.setExpiryDate(Instant.now().plusMillis(refreshExpirationMs));
         tokenRepository.save(refreshToken);
 
@@ -104,16 +100,21 @@ public class AuthenticationService {
     public void changePassword(ChangePasswordRequestDTO request, Principal connectedUser) {
         var user = (User) ((UsernamePasswordAuthenticationToken) connectedUser).getPrincipal();
 
-        // Check if current password is correct
+        if (!user.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            throw new IllegalStateException("Access Denied: Only Administrators are allowed to change passwords.");
+        }
+
+        if (user.getPassword() == null || user.getPassword().isEmpty()) {
+            throw new IllegalStateException("Administrator must have a current password set to change it.");
+        }
+
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new IllegalStateException("Wrong password");
         }
-        // Check if new passwords match
         if (!request.getNewPassword().equals(request.getConfirmationPassword())) {
             throw new IllegalStateException("Passwords are not the same");
         }
 
-        // Update password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         repository.save(user);
     }
@@ -122,7 +123,7 @@ public class AuthenticationService {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
                 .token(UUID.randomUUID().toString())
-                .expiryDate(Instant.now().plusMillis(refreshExpirationMs)) // 20 mins from now
+                .expiryDate(Instant.now().plusMillis(refreshExpirationMs))
                 .createdAt(Instant.now())
                 .build();
         return tokenRepository.save(refreshToken);
