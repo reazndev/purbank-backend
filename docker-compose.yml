@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: purbank-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: purbank
+      POSTGRES_USER: purbank_user
+      POSTGRES_PASSWORD: dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U purbank_user -d purbank"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - purbank-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: purbank-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@purbank.ch
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - purbank-network
+  backend:
+    image: ghcr.io/reazndev/purbank-backend/purbank-backend:main
+    container_name: purbank-backend-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "5005:5005"  # Debug port
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/purbank
+      SPRING_DATASOURCE_USERNAME: purbank_user
+      SPRING_DATASOURCE_PASSWORD: dev_password
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      SPRING_PROFILES_ACTIVE: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - purbank-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  purbank-network:
+    driver: bridge

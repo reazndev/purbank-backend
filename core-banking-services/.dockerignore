@@ -1,0 +1,46 @@
+# core-banking-services/.dockerignore
+
+# Build artifacts
+build/
+.gradle/
+bin/
+out/
+target/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+HELP.md
+*.md
+
+# Test files
+src/test/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
