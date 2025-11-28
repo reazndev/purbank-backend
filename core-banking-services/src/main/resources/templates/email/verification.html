@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Special+Gothic:wght@400;500;600;700&display=swap');
+
+        :root {
+            --color-black: #1D1D1D;
+            --color-gray: #BFBFBF;
+            --color-white: #EFEFEF;
+            --color-whiter: #fefdfd;
+            --color-accent-light: #A5B3BA;
+            --color-accent-dark: #5A7684;
+            --padding-standard: 24px;
+            }
+
+        body {
+            font-family: 'Special Gothic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: var(--color-white);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: var(--color-white);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: var(--color-accent-dark);
+            color: var(--color-white);
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .content h2 {
+            color: var(--color-black);
+            font-size: 22px;
+            margin-top: 0;
+            font-weight: 500;
+        }
+
+        .verification-code {
+            border: 2px dashed var(--color-accent-dark);
+            padding: 30px;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .code {
+            font-size: 36px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            color: var(--color-accent-dark);
+            font-family: 'Courier New', monospace;
+        }
+
+        .info-box {
+            background-color: var(--color-accent-light);
+            padding: 15px 15px 15px 15px;
+            text-align: center;
+        }
+
+        .info-box p {
+            margin: 0;
+            color: var(--color-black);
+        }
+
+        .footer {
+            background-color: var(--color-accent-dark);
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: var(--color-white);
+        }
+
+        .footer p {
+            margin: 5px 0;
+        }
+
+        .footer-callout {
+            font-weight: 500;
+        }
+
+        .verification-code p {
+            margin: 0 0 10px 0;
+            color: #1D1D1D;
+            font-size: 16px;
+        }
+
+        .signature-intro {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <!-- TODO: add logo -->
+            <h1>Purbank</h1>
+        </div>
+
+        <div class="content">
+            <h2>Verify Your Email Address</h2>
+            <p>Hello,</p>
+            <p>Thank you for starting your registration with Purbank. To complete your registration, please use the
+                verification code below:</p>
+
+            <div class="verification-code">
+                <p>Your Verification Code</p>
+                <div class="code" th:text="${verificationCode}">12345678</div>
+            </div>
+
+            <div class="info-box">
+                <p>Important: This code will expire in 15 minutes.</p>
+            </div>
+
+            <p>If you didn't request this code, please ignore this email.</p>
+
+            <p class="signature-intro">
+                Best regards,<br>
+                <span class="footer-callout">Purbank Team</span>
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 Purbank. All rights reserved.</p>
+            <p>This is an automated message, please do not reply.</p>
+        </div>
+    </div>
+</body>
+
+</html>
