@@ -10,6 +10,7 @@ import ch.purbank.core.repository.UserRepository;
 import ch.purbank.core.security.JwtService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthenticationService {
 
     private final UserRepository repository;
@@ -47,7 +49,7 @@ public class AuthenticationService {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
         } else if (user.getPassword() == null || user.getPassword().isEmpty()) {
-            System.out.println("Passwordless user logged in via external validation (No password check enforced).");
+            log.info("Passwordless user logged in via external validation: {}", user.getEmail());
         } else {
             throw new IllegalStateException("Authentication failed: Missing credentials for user role.");
         }
