@@ -46,15 +46,16 @@ public class AuthenticationService {
         if (user.getPassword() != null && !user.getPassword().isEmpty()) {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
-
         } else if (user.getPassword() == null || user.getPassword().isEmpty()) {
             System.out.println("Passwordless user logged in via external validation (No password check enforced).");
-
         } else {
             throw new IllegalStateException("Authentication failed: Missing credentials for user role.");
         }
 
         var jwtToken = jwtService.generateToken(user);
+
+        tokenRepository.deleteByUser(user);
+
         var refreshToken = createRefreshToken(user);
 
         return AuthenticationResponseDTO.builder()
