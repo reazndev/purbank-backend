@@ -27,7 +27,9 @@ public class AdminUserService {
 			throw new IllegalArgumentException("A user with this email already exists.");
 		}
 
-		user.setPassword(passwordEncoder.encode(user.getPassword()));
+		if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+    	user.setPassword(passwordEncoder.encode(user.getPassword()));
+		}
 
 		if (user.getRole() == null) {
 			user.setRole(Role.USER);
