@@ -76,15 +76,16 @@ public class AuthenticationService {
         RefreshToken refreshToken = tokenRepository.findByToken(refreshTokenStr)
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
 
-        if (refreshToken.isExpired()) {
+        long inactivityAge = refreshToken.getCreatedAt().toEpochMilli() + refreshExpirationMs;
+        if (Instant.now().toEpochMilli() > inactivityAge) {
             tokenRepository.delete(refreshToken);
-            throw new IllegalArgumentException("Refresh token expired (Inactivity)");
+            throw new IllegalArgumentException("Invalid refresh token or token expired.");
         }
 
         long absoluteMaxAge = refreshToken.getCreatedAt().toEpochMilli() + absoluteExpirationMs;
         if (Instant.now().toEpochMilli() > absoluteMaxAge) {
             tokenRepository.delete(refreshToken);
-            throw new IllegalArgumentException("Refresh token expired (Max 12h limit reached)");
+            throw new IllegalArgumentException("Invalid refresh token or token expired.");
         }
 
         User user = refreshToken.getUser();
