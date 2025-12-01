@@ -36,6 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        try {
         jwt = authHeader.substring(7);
         userEmail = jwtService.extractUsername(jwt);
 
@@ -46,7 +47,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         userDetails, null, userDetails.getAuthorities());
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (Exception e) {
+            logger.error("JWT token processing failed. Authentication will be skipped: " + e.getMessage(), e);
         }
         filterChain.doFilter(request, response);
     }
