@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-PurbankCoreBankingServiceApplication<core-banking-services>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "ch.purbank.core.PurbankCoreBankingServiceApplication",
+            "projectName": "core-banking-services",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
