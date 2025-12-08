@@ -50,7 +50,7 @@ public class AuthorisationRequest {
     @Column
     private LocalDateTime completedAt;
 
-    @Column(columnDefinition = "TEXT") // payload to describe the actio
+    @Column(columnDefinition = "TEXT") // payload to describe the action
     private String actionPayload;
 
     @PrePersist
