@@ -20,15 +20,16 @@ public class AuthorisationService {
     private final ActionExecutionService actionExecutionService;
 
     public AuthorisationService(AuthorisationRequestRepository authorisationRequestRepository,
-                                MobileSecurityService mobileSecurityService,
-                                ActionExecutionService actionExecutionService) {
+            MobileSecurityService mobileSecurityService,
+            ActionExecutionService actionExecutionService) {
         this.authorisationRequestRepository = authorisationRequestRepository;
         this.mobileSecurityService = mobileSecurityService;
         this.actionExecutionService = actionExecutionService;
     }
 
     @Transactional
-    public String createAuthorisationRequest(User user, String deviceId, String ipAddress, String actionType, String actionPayload) {
+    public String createAuthorisationRequest(User user, String deviceId, String ipAddress, String actionType,
+            String actionPayload) {
 
         authorisationRequestRepository.findByUserAndStatus(user, AuthorisationStatus.PENDING)
                 .forEach(req -> {
@@ -72,7 +73,7 @@ public class AuthorisationService {
             return Optional.empty();
         }
 
-        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
+        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify, request.getDeviceId())) {
             return Optional.empty();
         }
 
@@ -89,14 +90,16 @@ public class AuthorisationService {
         return handleMobileApproval(signedMobileVerify, "{REJECT}", AuthorisationStatus.REJECTED);
     }
 
-    private boolean handleMobileApproval(String signedMobileVerify, String requiredPrefix, AuthorisationStatus newStatus) {
+    private boolean handleMobileApproval(String signedMobileVerify, String requiredPrefix,
+            AuthorisationStatus newStatus) {
         String mobileVerifyCode = mobileSecurityService.extractMobileVerifyCode(signedMobileVerify);
 
         if (!signedMobileVerify.startsWith(requiredPrefix)) {
             return false;
         }
 
-        Optional<AuthorisationRequest> requestOpt = authorisationRequestRepository.findByMobileVerifyCode(mobileVerifyCode);
+        Optional<AuthorisationRequest> requestOpt = authorisationRequestRepository
+                .findByMobileVerifyCode(mobileVerifyCode);
 
         if (requestOpt.isEmpty()) {
             return false;
@@ -108,7 +111,7 @@ public class AuthorisationService {
             return false;
         }
 
-        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
+        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify, request.getDeviceId())) {
             return false;
         }
 

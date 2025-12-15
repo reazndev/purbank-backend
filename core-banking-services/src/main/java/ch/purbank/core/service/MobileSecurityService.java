@@ -1,6 +1,9 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.User;
+import ch.purbank.core.domain.MobileDevice;
+import ch.purbank.core.domain.enums.MobileDeviceStatus;
+import ch.purbank.core.repository.MobileDeviceRepository;
 import org.springframework.stereotype.Service;
 
 import java.security.KeyFactory;
@@ -8,6 +11,8 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -15,21 +20,38 @@ import java.util.logging.Logger;
 public class MobileSecurityService {
 
     private static final Logger logger = Logger.getLogger(MobileSecurityService.class.getName());
-    // Important note: The algorithm must match the one used for signing on the
-    // mobile app
     private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
     private static final String KEY_ALGORITHM = "RSA";
 
-    public boolean isValidSignature(User user, String signedMobileVerifyMessage) {
-        if (signedMobileVerifyMessage == null || signedMobileVerifyMessage.isEmpty()) {
+    private final MobileDeviceRepository mobileDeviceRepository;
+
+    public MobileSecurityService(MobileDeviceRepository mobileDeviceRepository) {
+        this.mobileDeviceRepository = mobileDeviceRepository;
+    }
+
+    public boolean isValidSignature(User user, String signedMobileVerifyMessage, String deviceIdString) {
+        if (signedMobileVerifyMessage == null || signedMobileVerifyMessage.isEmpty() || deviceIdString == null) {
             return false;
         }
 
-        String publicKeyString = user.getMobilePublicKey();
-        if (publicKeyString == null || publicKeyString.isEmpty()) {
-            logger.log(Level.WARNING, "User {0} has no registered mobile public key.", user.getId());
+        UUID deviceId;
+        try {
+            deviceId = UUID.fromString(deviceIdString);
+        } catch (IllegalArgumentException e) {
+            logger.log(Level.WARNING, "Invalid deviceId format: {0}", deviceIdString);
             return false;
         }
+
+        Optional<MobileDevice> deviceOpt = mobileDeviceRepository.findByIdAndStatus(deviceId,
+                MobileDeviceStatus.ACTIVE);
+
+        if (deviceOpt.isEmpty() || !deviceOpt.get().getUser().getId().equals(user.getId())) {
+            logger.log(Level.WARNING, "No active device found for id {0} or device does not belong to user {1}.",
+                    new Object[] { deviceIdString, user.getId() });
+            return false;
+        }
+
+        String publicKeyString = deviceOpt.get().getPublicKey();
 
         try {
             PublicKey mobilePublicKey = getPublicKeyFromString(publicKeyString);
@@ -50,7 +72,7 @@ public class MobileSecurityService {
             return signature.verify(signatureBytes);
 
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Signature verification failed for user " + user.getId(), e);
+            logger.log(Level.SEVERE, "Signature verification failed for device " + deviceIdString, e);
             return false;
         }
     }
