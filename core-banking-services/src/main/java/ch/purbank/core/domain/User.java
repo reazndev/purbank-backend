@@ -47,6 +47,9 @@ public class User implements UserDetails {
     @Column(nullable = true)
     private String password;
 
+    @Column(name = "mobile_public_key", columnDefinition = "TEXT")
+    private String mobilePublicKey;
+
     @Column(nullable = false)
     @Builder.Default
     private String status = "ACTIVE";
