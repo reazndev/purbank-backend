@@ -11,8 +11,7 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,52 +28,55 @@ public class MobileSecurityService {
         this.mobileDeviceRepository = mobileDeviceRepository;
     }
 
-    public boolean isValidSignature(User user, String signedMobileVerifyMessage, String deviceIdString) {
-        if (signedMobileVerifyMessage == null || signedMobileVerifyMessage.isEmpty() || deviceIdString == null) {
+    public boolean isValidSignature(User user, String signedMobileVerifyMessage) {
+        if (signedMobileVerifyMessage == null || signedMobileVerifyMessage.isEmpty()) {
             return false;
         }
 
-        UUID deviceId;
+        List<MobileDevice> activeDevices = mobileDeviceRepository.findByUserAndStatus(user, MobileDeviceStatus.ACTIVE);
+
+        if (activeDevices.isEmpty()) {
+            logger.log(Level.WARNING, "User {0} has no active mobile devices registered for approval.", user.getId());
+            return false;
+        }
+
+        String[] parts = signedMobileVerifyMessage.split("\\|");
+        if (parts.length != 2) {
+            logger.log(Level.WARNING, "Invalid signed message format for user {0}.", user.getId());
+            return false;
+        }
+
+        String originalMessage = parts[0];
+        byte[] signatureBytes;
         try {
-            deviceId = UUID.fromString(deviceIdString);
+            signatureBytes = Base64.getDecoder().decode(parts[1]);
         } catch (IllegalArgumentException e) {
-            logger.log(Level.WARNING, "Invalid deviceId format: {0}", deviceIdString);
+            logger.log(Level.WARNING, "Invalid Base64 signature format for user {0}.", user.getId());
             return false;
         }
 
-        Optional<MobileDevice> deviceOpt = mobileDeviceRepository.findByIdAndStatus(deviceId,
-                MobileDeviceStatus.ACTIVE);
-
-        if (deviceOpt.isEmpty() || !deviceOpt.get().getUser().getId().equals(user.getId())) {
-            logger.log(Level.WARNING, "No active device found for id {0} or device does not belong to user {1}.",
-                    new Object[] { deviceIdString, user.getId() });
-            return false;
-        }
-
-        String publicKeyString = deviceOpt.get().getPublicKey();
-
-        try {
-            PublicKey mobilePublicKey = getPublicKeyFromString(publicKeyString);
-
-            String[] parts = signedMobileVerifyMessage.split("\\|");
-            if (parts.length != 2) {
-                logger.log(Level.WARNING, "Invalid signed message format for user {0}.", user.getId());
-                return false;
+        for (MobileDevice device : activeDevices) {
+            String publicKeyString = device.getPublicKey();
+            if (publicKeyString == null || publicKeyString.isEmpty()) {
+                continue;
             }
 
-            String originalMessage = parts[0];
-            byte[] signatureBytes = Base64.getDecoder().decode(parts[1]);
+            try {
+                PublicKey mobilePublicKey = getPublicKeyFromString(publicKeyString);
+                Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
+                signature.initVerify(mobilePublicKey);
+                signature.update(originalMessage.getBytes());
 
-            Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
-            signature.initVerify(mobilePublicKey);
-            signature.update(originalMessage.getBytes());
-
-            return signature.verify(signatureBytes);
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Signature verification failed for device " + deviceIdString, e);
-            return false;
+                if (signature.verify(signatureBytes)) {
+                    return true;
+                }
+            } catch (Exception e) {
+                logger.log(Level.FINE, "Failed to verify signature with key for device {0}.", device.getId());
+            }
         }
+
+        logger.log(Level.WARNING, "Signature failed verification against all active keys for user {0}.", user.getId());
+        return false;
     }
 
     private PublicKey getPublicKeyFromString(String publicKeyBase64) throws Exception {

@@ -19,5 +19,5 @@ public interface MobileDeviceRepository extends JpaRepository<MobileDevice, UUID
 
     boolean existsByPublicKey(String publicKey);
 
-    Optional<MobileDevice> findByIdAndStatus(UUID id, MobileDeviceStatus status);
+    List<MobileDevice> findByUserAndStatus(User user, MobileDeviceStatus status);
 }

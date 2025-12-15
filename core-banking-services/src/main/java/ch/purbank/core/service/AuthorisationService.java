@@ -73,7 +73,7 @@ public class AuthorisationService {
             return Optional.empty();
         }
 
-        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify, request.getDeviceId())) {
+        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
             return Optional.empty();
         }
 
@@ -111,7 +111,7 @@ public class AuthorisationService {
             return false;
         }
 
-        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify, request.getDeviceId())) {
+        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
             return false;
         }
 
