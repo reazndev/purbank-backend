@@ -72,7 +72,7 @@ public class AuthorisationService {
             return Optional.empty();
         }
 
-$        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
+        if (!mobileSecurityService.isValidSignature(request.getUser(), signedMobileVerify)) {
             return Optional.empty();
         }
 
