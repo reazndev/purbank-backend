@@ -1,16 +1,21 @@
 package ch.purbank.core.repository;
 
 import ch.purbank.core.domain.AuthorisationRequest;
+import ch.purbank.core.domain.User;
 import ch.purbank.core.domain.enums.AuthorisationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface AuthorisationRequestRepository extends JpaRepository<AuthorisationRequest, UUID> {
+
     Optional<AuthorisationRequest> findByMobileVerifyCode(String mobileVerifyCode);
+
+    List<AuthorisationRequest> findByUserAndStatus(User user, AuthorisationStatus status);
 
     Optional<AuthorisationRequest> findByUserIdAndStatus(UUID userId, AuthorisationStatus status);
 
@@ -18,4 +23,6 @@ public interface AuthorisationRequestRepository extends JpaRepository<Authorisat
             String mobileVerifyCode,
             String deviceId,
             AuthorisationStatus status);
+
+    Optional<AuthorisationRequest> findByMobileVerifyCodeAndStatus(String mobileVerifyCode, AuthorisationStatus status);
 }
