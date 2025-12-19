@@ -4,6 +4,7 @@ import ch.purbank.core.domain.*;
 import ch.purbank.core.domain.enums.*;
 import ch.purbank.core.dto.*;
 import ch.purbank.core.repository.*;
+import ch.purbank.core.security.SecureTokenGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,10 +23,13 @@ import java.util.stream.Collectors;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final PendingPaymentRepository pendingPaymentRepository;
     private final KontoRepository kontoRepository;
     private final KontoMemberRepository kontoMemberRepository;
     private final UserRepository userRepository;
     private final KontoService kontoService;
+
+    private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
     @Transactional(readOnly = true)
     public List<PaymentDTO> getAllPendingPayments(UUID userId, UUID kontoIdFilter) {
@@ -160,8 +164,8 @@ public class PaymentService {
         }
         if (request.getExecutionDate() != null) {
             if (request.getExecutionDate().isBefore(LocalDate.now())) { // TODO: maybe only allow the next business day,
-                                                                        // or we keep it and it will just be executed on
-                                                                        // the next business day.
+                // or we keep it and it will just be executed on
+                // the next business day.
                 throw new IllegalArgumentException("Execution date cannot be in the past");
             }
             payment.setExecutionDate(request.getExecutionDate());
@@ -267,6 +271,161 @@ public class PaymentService {
         }
 
         log.info("Scheduled payment processing complete");
+    }
+
+    // Scheduled job to clean up expired pending payments every 5 minutes
+    @Scheduled(fixedRate = 300000) // 5 minutes in milliseconds
+    @Transactional
+    public void cleanupExpiredPendingPayments() {
+        log.debug("Cleaning up expired pending payments...");
+
+        List<PendingPayment> expiredPayments = pendingPaymentRepository
+                .findExpiredPendingPayments(PendingPaymentStatus.PENDING, java.time.LocalDateTime.now());
+
+        int count = 0;
+        for (PendingPayment pendingPayment : expiredPayments) {
+            pendingPayment.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingPaymentRepository.save(pendingPayment);
+            count++;
+        }
+
+        if (count > 0) {
+            log.info("Marked {} pending payments as expired", count);
+        }
+    }
+
+    @Transactional
+    public String createPendingPayment(UUID userId, String deviceId, String ipAddress, CreatePaymentRequestDTO request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Konto konto = kontoRepository.findById(request.getKontoId())
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        KontoMember membership = kontoMemberRepository.findByKontoAndUser(konto, user)
+                .orElseThrow(() -> new IllegalArgumentException("User is not a member of this konto"));
+
+        // Only OWNER and MANAGER can create payments
+        if (membership.getRole() == MemberRole.VIEWER) {
+            throw new IllegalArgumentException("Viewers cannot create payments");
+        }
+
+        if (konto.getStatus() != KontoStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cannot create payment for closed konto");
+        }
+
+        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive");
+        }
+
+        // For INSTANT payments, check if konto has sufficient funds
+        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+            if (konto.getBalance().compareTo(request.getAmount()) < 0) {
+                throw new IllegalArgumentException("Insufficient funds for instant payment");
+            }
+        }
+
+        // Determine execution date
+        LocalDate executionDate;
+        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+            executionDate = LocalDate.now();
+        } else {
+            if (request.getExecutionDate() == null) {
+                throw new IllegalArgumentException("Execution date required for normal payments");
+            }
+            if (request.getExecutionDate().isBefore(LocalDate.now())) {
+                throw new IllegalArgumentException("Execution date cannot be in the past");
+            }
+            executionDate = request.getExecutionDate();
+        }
+
+        // Invalidate any pending payment requests for this user
+        List<PendingPayment> existingPending = pendingPaymentRepository.findByUserAndStatus(user, PendingPaymentStatus.PENDING);
+        for (PendingPayment existing : existingPending) {
+            existing.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingPaymentRepository.save(existing);
+        }
+
+        // Generate mobile verify code
+        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+
+        // Create pending payment
+        PendingPayment pendingPayment = PendingPayment.builder()
+                .user(user)
+                .mobileVerifyCode(mobileVerifyCode)
+                .kontoId(request.getKontoId())
+                .toIban(request.getToIban())
+                .amount(request.getAmount())
+                .message(request.getMessage())
+                .note(request.getNote())
+                .executionType(request.getExecutionType())
+                .executionDate(executionDate)
+                .deviceId(deviceId)
+                .ipAddress(ipAddress)
+                .build();
+
+        pendingPaymentRepository.save(pendingPayment);
+
+        log.info("Pending payment created: {} for user {} requiring mobile approval", pendingPayment.getId(), userId);
+        return mobileVerifyCode;
+    }
+
+    @Transactional
+    public Payment executeApprovedPayment(PendingPayment pendingPayment) {
+        // Validate pending payment status
+        if (pendingPayment.getStatus() != PendingPaymentStatus.PENDING) {
+            throw new IllegalArgumentException("Pending payment is not in PENDING status");
+        }
+
+        if (pendingPayment.isExpired()) {
+            throw new IllegalArgumentException("Pending payment has expired");
+        }
+
+        Konto konto = kontoRepository.findById(pendingPayment.getKontoId())
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        // Verify user still has access to konto
+        User user = pendingPayment.getUser();
+        KontoMember membership = kontoMemberRepository.findByKontoAndUser(konto, user)
+                .orElseThrow(() -> new IllegalArgumentException("User is no longer a member of this konto"));
+
+        if (membership.getRole() == MemberRole.VIEWER) {
+            throw new IllegalArgumentException("User no longer has permission to create payments");
+        }
+
+        if (konto.getStatus() != KontoStatus.ACTIVE) {
+            throw new IllegalArgumentException("Konto is no longer active");
+        }
+
+        // For INSTANT payments, check if konto still has sufficient funds
+        if (pendingPayment.getExecutionType() == PaymentExecutionType.INSTANT) {
+            if (konto.getBalance().compareTo(pendingPayment.getAmount()) < 0) {
+                throw new IllegalArgumentException("Insufficient funds for instant payment");
+            }
+        }
+
+        // Create actual payment
+        Payment payment = new Payment();
+        payment.setKonto(konto);
+        payment.setToIban(pendingPayment.getToIban());
+        payment.setAmount(pendingPayment.getAmount());
+        payment.setMessage(pendingPayment.getMessage());
+        payment.setNote(pendingPayment.getNote());
+        payment.setExecutionType(pendingPayment.getExecutionType());
+        payment.setExecutionDate(pendingPayment.getExecutionDate());
+
+        payment = paymentRepository.save(payment);
+
+        // If INSTANT, execute immediately
+        if (pendingPayment.getExecutionType() == PaymentExecutionType.INSTANT) {
+            executePayment(payment);
+        }
+
+        pendingPayment.markCompleted(PendingPaymentStatus.APPROVED);
+        pendingPaymentRepository.save(pendingPayment);
+
+        log.info("Payment {} created and approved from pending payment {}", payment.getId(), pendingPayment.getId());
+        return payment;
     }
 
     private PaymentDTO toDTO(Payment payment) {

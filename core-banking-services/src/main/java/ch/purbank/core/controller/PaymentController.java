@@ -7,6 +7,7 @@ import ch.purbank.core.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,13 +38,27 @@ public class PaymentController {
     }
 
     @PostMapping
-    @Operation(summary = "Create payment", description = "Creates a new payment. Instant payments require sufficient balance.")
-    public ResponseEntity<Payment> createPayment(
+    @Operation(summary = "Create payment", description = "Creates a pending payment that requires mobile approval. Returns a mobile-verify code.")
+    public ResponseEntity<PendingPaymentResponseDTO> createPayment(
             @AuthenticationPrincipal User currentUser,
-            @Parameter(description = "Payment creation details", required = true) @Valid @RequestBody CreatePaymentRequestDTO request) {
+            @Parameter(description = "Device ID for mobile verification", required = true) @RequestParam String deviceId,
+            @Parameter(description = "Payment creation details", required = true) @Valid @RequestBody CreatePaymentRequestDTO request,
+            HttpServletRequest httpRequest) {
 
-        Payment payment = paymentService.createPayment(currentUser.getId(), request);
-        return ResponseEntity.ok(payment);
+        // Extract IP address from request
+        String ipAddress = httpRequest.getRemoteAddr();
+        String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            ipAddress = forwardedFor.split(",")[0].trim();
+        }
+
+        String mobileVerifyCode = paymentService.createPendingPayment(
+                currentUser.getId(),
+                deviceId,
+                ipAddress,
+                request);
+
+        return ResponseEntity.ok(new PendingPaymentResponseDTO(mobileVerifyCode, "PENDING_APPROVAL"));
     }
 
     @PatchMapping("/{paymentId}")

@@ -1,8 +1,11 @@
 package ch.purbank.core.service;
 
+import ch.purbank.core.domain.PendingPayment;
 import ch.purbank.core.domain.RefreshToken;
 import ch.purbank.core.domain.User;
+import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import ch.purbank.core.dto.*;
+import ch.purbank.core.repository.PendingPaymentRepository;
 import ch.purbank.core.repository.RefreshTokenRepository;
 import ch.purbank.core.repository.UserRepository;
 import ch.purbank.core.security.JwtService;
@@ -13,6 +16,7 @@ import ch.purbank.core.security.SecureTokenGenerator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -35,6 +39,7 @@ public class AuthenticationService {
     private final RefreshTokenRepository tokenRepository;
     private final AuthorisationRequestRepository authorisationRepository;
     private final AuthorisationRequestRepository authorisationRequestRepository;
+    private final PendingPaymentRepository pendingPaymentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -112,20 +117,49 @@ public class AuthenticationService {
     }
 
     public AuthStatusResponseDTO checkAuthorisationStatus(AuthStatusRequestDTO request) {
-        AuthorisationRequest authRequest = authorisationRepository.findByMobileVerifyCode(request.getMobileVerify())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid mobile-verify code or request not found."));
+        // First check authorisation_requests (for login)
+        Optional<AuthorisationRequest> authRequestOpt = authorisationRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
 
-        if (!authRequest.getDeviceId().equals(request.getDeviceId())) {
-            throw new IllegalArgumentException("Device ID mismatch.");
+        if (authRequestOpt.isPresent()) {
+            AuthorisationRequest authRequest = authRequestOpt.get();
+
+            if (!authRequest.getDeviceId().equals(request.getDeviceId())) {
+                throw new IllegalArgumentException("Device ID mismatch.");
+            }
+
+            if (authRequest.isExpired() && authRequest.getStatus() == AuthorisationStatus.PENDING) {
+                authRequest.markCompleted(AuthorisationStatus.INVALID);
+                authorisationRepository.save(authRequest);
+                return new AuthStatusResponseDTO(AuthorisationStatus.INVALID.name());
+            }
+
+            return new AuthStatusResponseDTO(authRequest.getStatus().name());
         }
 
-        if (authRequest.isExpired() && authRequest.getStatus() == AuthorisationStatus.PENDING) {
-            authRequest.markCompleted(AuthorisationStatus.INVALID);
-            authorisationRepository.save(authRequest);
-            return new AuthStatusResponseDTO(AuthorisationStatus.INVALID.name());
+        // If not found, check pending_payments (for payment approval)
+        Optional<PendingPayment> pendingPaymentOpt = pendingPaymentRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
+
+        if (pendingPaymentOpt.isPresent()) {
+            PendingPayment pendingPayment = pendingPaymentOpt.get();
+
+            if (!pendingPayment.getDeviceId().equals(request.getDeviceId())) {
+                throw new IllegalArgumentException("Device ID mismatch.");
+            }
+
+            if (pendingPayment.isExpired() && pendingPayment.getStatus() == PendingPaymentStatus.PENDING) {
+                pendingPayment.markCompleted(PendingPaymentStatus.EXPIRED);
+                pendingPaymentRepository.save(pendingPayment);
+                return new AuthStatusResponseDTO("EXPIRED");
+            }
+
+            // Map PendingPaymentStatus to AuthorisationStatus format
+            String status = pendingPayment.getStatus().name();
+            return new AuthStatusResponseDTO(status);
         }
 
-        return new AuthStatusResponseDTO(authRequest.getStatus().name());
+        throw new IllegalArgumentException("Invalid mobile-verify code or request not found.");
     }
 
     @Transactional
