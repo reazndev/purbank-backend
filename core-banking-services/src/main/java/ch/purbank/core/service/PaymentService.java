@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -28,6 +29,7 @@ public class PaymentService {
     private final KontoMemberRepository kontoMemberRepository;
     private final UserRepository userRepository;
     private final KontoService kontoService;
+    private final CurrencyConversionService currencyConversionService;
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
@@ -97,6 +99,8 @@ public class PaymentService {
         payment.setKonto(konto);
         payment.setToIban(request.getToIban());
         payment.setAmount(request.getAmount());
+        payment.setPaymentCurrency(request.getPaymentCurrency() != null ?
+                request.getPaymentCurrency() : Currency.CHF);
         payment.setMessage(request.getMessage());
         payment.setNote(request.getNote());
         payment.setExecutionType(request.getExecutionType());
@@ -205,32 +209,100 @@ public class PaymentService {
 
     @Transactional
     protected void executePayment(Payment payment) {
-        Konto konto = payment.getKonto();
+        try {
+            // Step 1-2: Get source konto and its currency
+            Konto sourceKonto = payment.getKonto();
+            Currency sourceKontoCurrency = sourceKonto.getCurrency();
+            Currency paymentCurrency = payment.getPaymentCurrency();
+            BigDecimal paymentAmount = payment.getAmount();
 
-        // Check if konto has sufficient funds
-        if (konto.getBalance().compareTo(payment.getAmount()) < 0) {
+            log.info("Executing payment {} - Amount: {} {}, Source Konto Currency: {}",
+                    payment.getId(), paymentAmount, paymentCurrency, sourceKontoCurrency);
+
+            // Step 3: Convert payment to source konto currency
+            BigDecimal kontoAmountToDeduct;
+            if (!paymentCurrency.equals(sourceKontoCurrency)) {
+                kontoAmountToDeduct = currencyConversionService.convert(
+                        paymentAmount, paymentCurrency, sourceKontoCurrency);
+                log.info("Converted {} {} to {} {} for deduction",
+                        paymentAmount, paymentCurrency, kontoAmountToDeduct, sourceKontoCurrency);
+            } else {
+                kontoAmountToDeduct = paymentAmount;
+            }
+
+            // Step 4: Check if sufficient balance
+            if (sourceKonto.getBalance().compareTo(kontoAmountToDeduct) < 0) {
+                payment.fail();
+                paymentRepository.save(payment);
+                log.warn("Payment {} failed: insufficient funds (need {} {}, have {} {})",
+                        payment.getId(), kontoAmountToDeduct, sourceKontoCurrency,
+                        sourceKonto.getBalance(), sourceKontoCurrency);
+                return;
+            }
+
+            // Step 5: Deduct from source konto
+            sourceKonto.subtractFromBalance(kontoAmountToDeduct);
+            kontoRepository.save(sourceKonto);
+
+            // Step 6: Create outgoing transaction
+            kontoService.createTransaction(
+                    sourceKonto.getId(),
+                    payment.getToIban(),
+                    kontoAmountToDeduct.negate(), // Negative for outgoing
+                    "Payment to " + payment.getToIban(),
+                    TransactionType.OUTGOING,
+                    sourceKontoCurrency);
+
+            // Step 7: Find target konto by IBAN
+            Optional<Konto> targetKontoOpt = kontoRepository.findByIban(payment.getToIban());
+            if (targetKontoOpt.isEmpty()) {
+                payment.fail();
+                paymentRepository.save(payment);
+                log.warn("Payment {} failed: target IBAN not found: {}", payment.getId(), payment.getToIban());
+                return;
+            }
+
+            // Step 8: Get target konto
+            Konto targetKonto = targetKontoOpt.get();
+            Currency targetKontoCurrency = targetKonto.getCurrency();
+
+            // Step 9: Convert payment to target konto currency
+            BigDecimal targetAmountToAdd;
+            if (!paymentCurrency.equals(targetKontoCurrency)) {
+                targetAmountToAdd = currencyConversionService.convert(
+                        paymentAmount, paymentCurrency, targetKontoCurrency);
+                log.info("Converted {} {} to {} {} for target konto",
+                        paymentAmount, paymentCurrency, targetAmountToAdd, targetKontoCurrency);
+            } else {
+                targetAmountToAdd = paymentAmount;
+            }
+
+            // Step 10: Add to target konto
+            targetKonto.addToBalance(targetAmountToAdd);
+            kontoRepository.save(targetKonto);
+
+            // Step 11: Create incoming transaction
+            kontoService.createTransaction(
+                    targetKonto.getId(),
+                    sourceKonto.getIban(),
+                    targetAmountToAdd,
+                    "Payment from " + sourceKonto.getIban(),
+                    TransactionType.INCOMING,
+                    targetKontoCurrency);
+
+            // Step 12: Mark payment as executed
+            payment.execute();
+            paymentRepository.save(payment);
+
+            log.info("Payment {} executed successfully - Deducted: {} {}, Added: {} {}",
+                    payment.getId(), kontoAmountToDeduct, sourceKontoCurrency,
+                    targetAmountToAdd, targetKontoCurrency);
+
+        } catch (Exception e) {
             payment.fail();
             paymentRepository.save(payment);
-            log.warn("Payment {} failed: insufficient funds", payment.getId());
-            return;
+            log.error("Payment {} failed with exception: {}", payment.getId(), e.getMessage(), e);
         }
-
-        // Deduct from konto
-        konto.subtractFromBalance(payment.getAmount());
-        kontoRepository.save(konto);
-
-        // Create outgoing transaction
-        kontoService.createTransaction(
-                konto.getId(),
-                konto.getIban(),
-                payment.getAmount().negate(), // Negative for outgoing
-                "Payment to " + payment.getToIban());
-
-        // Mark payment as executed
-        payment.execute();
-        paymentRepository.save(payment);
-
-        log.info("Payment {} executed successfully", payment.getId());
     }
 
     // Scheduled job to process payments at 1:00 AM daily
@@ -356,6 +428,8 @@ public class PaymentService {
                 .kontoId(request.getKontoId())
                 .toIban(request.getToIban())
                 .amount(request.getAmount())
+                .paymentCurrency(request.getPaymentCurrency() != null ?
+                        request.getPaymentCurrency() : Currency.CHF)
                 .message(request.getMessage())
                 .note(request.getNote())
                 .executionType(request.getExecutionType())
@@ -409,6 +483,7 @@ public class PaymentService {
         payment.setKonto(konto);
         payment.setToIban(pendingPayment.getToIban());
         payment.setAmount(pendingPayment.getAmount());
+        payment.setPaymentCurrency(pendingPayment.getPaymentCurrency());
         payment.setMessage(pendingPayment.getMessage());
         payment.setNote(pendingPayment.getNote());
         payment.setExecutionType(pendingPayment.getExecutionType());
@@ -434,6 +509,7 @@ public class PaymentService {
                 payment.getKonto().getId(),
                 payment.getToIban(),
                 payment.getAmount(),
+                payment.getPaymentCurrency(),
                 payment.getMessage(),
                 payment.getNote(),
                 payment.getExecutionType(),

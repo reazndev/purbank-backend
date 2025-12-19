@@ -1,5 +1,6 @@
 package ch.purbank.core.dto;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.PaymentExecutionType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -19,6 +20,8 @@ public class CreatePaymentRequestDTO {
 
     @NotNull
     private BigDecimal amount;
+
+    private Currency paymentCurrency; // Optional, defaults to CHF
 
     private String message;
 

@@ -1,5 +1,6 @@
 package ch.purbank.core.dto;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.MemberRole;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,4 +16,5 @@ public class KontoListItemDTO {
     private BigDecimal balance;
     private MemberRole role;
     private String iban;
+    private Currency currency;
 }

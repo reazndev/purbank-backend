@@ -1,5 +1,6 @@
 package ch.purbank.core.domain;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.KontoStatus;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -31,6 +32,10 @@ public class Konto {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    private Currency currency = Currency.CHF;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private KontoStatus status = KontoStatus.ACTIVE;
 
     @Column(nullable = false)
@@ -50,6 +55,9 @@ public class Konto {
         createdAt = LocalDateTime.now();
         if (iban == null) {
             iban = generateIban();
+        }
+        if (currency == null) {
+            currency = Currency.CHF;
         }
     }
 

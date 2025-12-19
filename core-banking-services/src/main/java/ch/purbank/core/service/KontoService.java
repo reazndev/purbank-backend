@@ -1,9 +1,11 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.*;
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.KontoStatus;
 import ch.purbank.core.domain.enums.MemberRole;
 import ch.purbank.core.domain.enums.PaymentStatus;
+import ch.purbank.core.domain.enums.TransactionType;
 import ch.purbank.core.dto.*;
 import ch.purbank.core.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -30,14 +32,17 @@ public class KontoService {
     private final UserRepository userRepository;
 
     @Transactional
-    public Konto createKonto(String name, UUID userId) {
-        log.info("Creating konto '{}' for user {}", name, userId);
+    public Konto createKonto(String name, UUID userId, Currency currency) {
+        log.info("Creating konto '{}' for user {} with currency {}", name, userId, currency);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         Konto konto = new Konto();
         konto.setName(name);
+        if (currency != null) {
+            konto.setCurrency(currency);
+        }
 
         konto = kontoRepository.save(konto);
 
@@ -65,7 +70,8 @@ public class KontoService {
                         m.getKonto().getName(),
                         m.getKonto().getBalance(),
                         m.getRole(),
-                        m.getKonto().getIban()))
+                        m.getKonto().getIban(),
+                        m.getKonto().getCurrency()))
                 .collect(Collectors.toList());
     }
 
@@ -87,6 +93,7 @@ public class KontoService {
                 membership.getRole(),
                 konto.getZinssatz(),
                 konto.getIban(),
+                konto.getCurrency(),
                 konto.getStatus(),
                 konto.getCreatedAt(),
                 konto.getClosedAt());
@@ -122,7 +129,9 @@ public class KontoService {
                         t.getAmount(),
                         t.getBalanceAfter(),
                         t.getTimestamp(),
-                        t.getFromIban(),
+                        t.getIban(),
+                        t.getTransactionType(),
+                        t.getCurrency(),
                         t.getMessage(),
                         t.getNote()))
                 .collect(Collectors.toList());
@@ -313,7 +322,8 @@ public class KontoService {
     }
 
     @Transactional
-    public Transaction createTransaction(UUID kontoId, String fromIban, BigDecimal amount, String message) {
+    public Transaction createTransaction(UUID kontoId, String iban, BigDecimal amount, String message,
+                                         TransactionType transactionType, Currency currency) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -326,10 +336,12 @@ public class KontoService {
 
         Transaction transaction = new Transaction();
         transaction.setKonto(konto);
-        transaction.setFromIban(fromIban);
+        transaction.setIban(iban);
         transaction.setAmount(amount);
         transaction.setBalanceAfter(konto.getBalance());
         transaction.setMessage(message);
+        transaction.setTransactionType(transactionType);
+        transaction.setCurrency(currency);
 
         return transactionRepository.save(transaction);
     }

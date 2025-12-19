@@ -1,5 +1,7 @@
 package ch.purbank.core.domain;
 
+import ch.purbank.core.domain.enums.Currency;
+import ch.purbank.core.domain.enums.TransactionType;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -31,7 +33,15 @@ public class Transaction {
     private LocalDateTime timestamp;
 
     @Column(nullable = false)
-    private String fromIban;
+    private String iban;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TransactionType transactionType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Currency currency = Currency.CHF;
 
     @Column(columnDefinition = "TEXT")
     private String message; // Message from sender

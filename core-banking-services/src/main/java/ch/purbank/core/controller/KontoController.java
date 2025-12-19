@@ -32,7 +32,7 @@ public class KontoController {
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Konto creation details", required = true) @Valid @RequestBody CreateKontoRequestDTO request) {
 
-        Konto konto = kontoService.createKonto(request.getName(), currentUser.getId());
+        Konto konto = kontoService.createKonto(request.getName(), currentUser.getId(), request.getCurrency());
         return ResponseEntity.ok(konto);
     }
 

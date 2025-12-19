@@ -1,5 +1,6 @@
 package ch.purbank.core.domain;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.PaymentExecutionType;
 import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import jakarta.persistence.*;
@@ -42,6 +43,11 @@ public class PendingPayment {
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_currency", nullable = false)
+    @Builder.Default
+    private Currency paymentCurrency = Currency.CHF;
 
     @Column(columnDefinition = "TEXT")
     private String message;

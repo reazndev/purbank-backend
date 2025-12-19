@@ -1,5 +1,6 @@
 package ch.purbank.core.dto;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.PaymentExecutionType;
 import ch.purbank.core.domain.enums.PaymentStatus;
 import lombok.AllArgsConstructor;
@@ -16,6 +17,7 @@ public class PaymentDTO {
     private UUID kontoId;
     private String toIban;
     private BigDecimal amount;
+    private Currency paymentCurrency;
     private String message;
     private String note;
     private PaymentExecutionType executionType;

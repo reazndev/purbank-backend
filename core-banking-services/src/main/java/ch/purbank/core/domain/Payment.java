@@ -1,5 +1,6 @@
 package ch.purbank.core.domain;
 
+import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.PaymentExecutionType;
 import ch.purbank.core.domain.enums.PaymentStatus;
 import jakarta.persistence.*;
@@ -29,6 +30,10 @@ public class Payment {
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Currency paymentCurrency = Currency.CHF;
 
     @Column(columnDefinition = "TEXT")
     private String message; // Message to recipient
@@ -79,7 +84,7 @@ public class Payment {
             return false;
         }
         LocalDateTime lockTime = executionDate.atTime(0, 50); // 10 minutes before 1:00 AM, TODO: see todo in
-                                                              // paymentservice
+        // paymentservice
         return LocalDateTime.now().isAfter(lockTime);
     }
 
