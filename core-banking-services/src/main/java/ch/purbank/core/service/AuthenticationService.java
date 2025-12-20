@@ -178,7 +178,7 @@ public class AuthenticationService {
         User user = authRequest.getUser();
 
         if (authRequest.getCompletedAt() != null
-                && authRequest.getCompletedAt().isBefore(LocalDateTime.now().minusSeconds(5))) {
+                && authRequest.getCompletedAt().isBefore(LocalDateTime.now().minusSeconds(30))) {
             log.error("Token already issued or authorisation completed too long ago. Request completed at: {}",
                     authRequest.getCompletedAt());
             throw new IllegalStateException("Token already issued or authorisation expired.");
