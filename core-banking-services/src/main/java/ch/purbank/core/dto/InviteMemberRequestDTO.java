@@ -12,4 +12,7 @@ public class InviteMemberRequestDTO {
 
     @NotNull
     private MemberRole role;
+
+    @NotBlank(message = "Device ID is required")
+    private String deviceId;
 }

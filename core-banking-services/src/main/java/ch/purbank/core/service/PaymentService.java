@@ -25,6 +25,8 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PendingPaymentRepository pendingPaymentRepository;
+    private final PendingPaymentUpdateRepository pendingPaymentUpdateRepository;
+    private final PendingPaymentDeleteRepository pendingPaymentDeleteRepository;
     private final KontoRepository kontoRepository;
     private final KontoMemberRepository kontoMemberRepository;
     private final UserRepository userRepository;
@@ -129,8 +131,7 @@ public class PaymentService {
     }
 
     @Transactional
-    public void updatePayment(UUID userId, UUID paymentId, UpdatePaymentRequestDTO request) {
-        // TODO: handle mobile-verify
+    public String createPendingPaymentUpdate(UUID userId, UUID paymentId, String deviceId, String ipAddress, UpdatePaymentRequestDTO request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -151,37 +152,77 @@ public class PaymentService {
             throw new IllegalArgumentException("Payment cannot be modified (locked or not pending)");
         }
 
-        if (request.getToIban() != null) {
-            payment.setToIban(request.getToIban());
+        // Validate update data
+        if (request.getAmount() != null && request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive");
         }
-        if (request.getAmount() != null) {
-            if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Payment amount must be positive");
-            }
-            payment.setAmount(request.getAmount());
-        }
-        if (request.getMessage() != null) {
-            payment.setMessage(request.getMessage());
-        }
-        if (request.getNote() != null) {
-            payment.setNote(request.getNote());
-        }
-        if (request.getExecutionDate() != null) {
-            if (request.getExecutionDate().isBefore(LocalDate.now())) { // TODO: maybe only allow the next business day,
-                // or we keep it and it will just be executed on
-                // the next business day.
-                throw new IllegalArgumentException("Execution date cannot be in the past");
-            }
-            payment.setExecutionDate(request.getExecutionDate());
+        if (request.getExecutionDate() != null && request.getExecutionDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Execution date cannot be in the past");
         }
 
-        paymentRepository.save(payment);
-        log.info("Payment {} updated", paymentId);
+        // Invalidate any pending update requests for this user
+        List<PendingPaymentUpdate> existingPending = pendingPaymentUpdateRepository.findByUserAndStatus(user, PendingPaymentStatus.PENDING);
+        for (PendingPaymentUpdate existing : existingPending) {
+            existing.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingPaymentUpdateRepository.save(existing);
+        }
+
+        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+
+        PendingPaymentUpdate pendingUpdate = PendingPaymentUpdate.builder()
+                .user(user)
+                .mobileVerifyCode(mobileVerifyCode)
+                .paymentId(paymentId)
+                .toIban(request.getToIban())
+                .amount(request.getAmount())
+                .paymentCurrency(request.getPaymentCurrency())
+                .message(request.getMessage())
+                .note(request.getNote())
+                .executionDate(request.getExecutionDate())
+                .deviceId(deviceId)
+                .ipAddress(ipAddress)
+                .build();
+
+        pendingPaymentUpdateRepository.save(pendingUpdate);
+        log.info("Created pending payment update for payment {}", paymentId);
+
+        return mobileVerifyCode;
     }
 
     @Transactional
-    public void cancelPayment(UUID userId, UUID paymentId) {
-        // TODO: handle mobile-verify
+    protected void executeApprovedPaymentUpdate(PendingPaymentUpdate pendingUpdate) {
+        Payment payment = paymentRepository.findById(pendingUpdate.getPaymentId())
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (!payment.canBeModified()) {
+            throw new IllegalArgumentException("Payment cannot be modified (locked or not pending)");
+        }
+
+        if (pendingUpdate.getToIban() != null) {
+            payment.setToIban(pendingUpdate.getToIban());
+        }
+        if (pendingUpdate.getAmount() != null) {
+            payment.setAmount(pendingUpdate.getAmount());
+        }
+        if (pendingUpdate.getPaymentCurrency() != null) {
+            payment.setPaymentCurrency(pendingUpdate.getPaymentCurrency());
+        }
+        if (pendingUpdate.getMessage() != null) {
+            payment.setMessage(pendingUpdate.getMessage());
+        }
+        if (pendingUpdate.getNote() != null) {
+            payment.setNote(pendingUpdate.getNote());
+        }
+        if (pendingUpdate.getExecutionDate() != null) {
+            payment.setExecutionDate(pendingUpdate.getExecutionDate());
+        }
+
+        paymentRepository.save(payment);
+        log.info("Payment {} updated after approval", payment.getId());
+    }
+
+    @Transactional
+    public String createPendingPaymentDelete(UUID userId, UUID paymentId, String deviceId, String ipAddress) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -202,9 +243,41 @@ public class PaymentService {
             throw new IllegalArgumentException("Payment cannot be cancelled (locked or not pending)");
         }
 
+        // Invalidate any pending delete requests for this user
+        List<PendingPaymentDelete> existingPending = pendingPaymentDeleteRepository.findByUserAndStatus(user, PendingPaymentStatus.PENDING);
+        for (PendingPaymentDelete existing : existingPending) {
+            existing.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingPaymentDeleteRepository.save(existing);
+        }
+
+        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+
+        PendingPaymentDelete pendingDelete = PendingPaymentDelete.builder()
+                .user(user)
+                .mobileVerifyCode(mobileVerifyCode)
+                .paymentId(paymentId)
+                .deviceId(deviceId)
+                .ipAddress(ipAddress)
+                .build();
+
+        pendingPaymentDeleteRepository.save(pendingDelete);
+        log.info("Created pending payment delete for payment {}", paymentId);
+
+        return mobileVerifyCode;
+    }
+
+    @Transactional
+    protected void executeApprovedPaymentDelete(PendingPaymentDelete pendingDelete) {
+        Payment payment = paymentRepository.findById(pendingDelete.getPaymentId())
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (!payment.canBeModified()) {
+            throw new IllegalArgumentException("Payment cannot be cancelled (locked or not pending)");
+        }
+
         payment.cancel();
         paymentRepository.save(payment);
-        log.info("Payment {} cancelled", paymentId);
+        log.info("Payment {} cancelled after approval", payment.getId());
     }
 
     @Transactional
@@ -244,12 +317,13 @@ public class PaymentService {
             sourceKonto.subtractFromBalance(kontoAmountToDeduct);
             kontoRepository.save(sourceKonto);
 
-            // Step 6: Create outgoing transaction
+            // Step 6: Create outgoing transaction (preserve message and note from payment)
             kontoService.createTransaction(
                     sourceKonto.getId(),
                     payment.getToIban(),
                     kontoAmountToDeduct.negate(), // Negative for outgoing
-                    "Payment to " + payment.getToIban(),
+                    payment.getMessage(), // Use original message
+                    payment.getNote(), // Use original note
                     TransactionType.OUTGOING,
                     sourceKontoCurrency);
 
@@ -281,12 +355,13 @@ public class PaymentService {
             targetKonto.addToBalance(targetAmountToAdd);
             kontoRepository.save(targetKonto);
 
-            // Step 11: Create incoming transaction
+            // Step 11: Create incoming transaction (preserve message, but note is null for receiver)
             kontoService.createTransaction(
                     targetKonto.getId(),
                     sourceKonto.getIban(),
                     targetAmountToAdd,
-                    "Payment from " + sourceKonto.getIban(),
+                    payment.getMessage(), // Use original message
+                    null, // Note is null for receiver
                     TransactionType.INCOMING,
                     targetKontoCurrency);
 

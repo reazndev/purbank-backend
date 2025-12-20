@@ -101,24 +101,53 @@ public class KontoController {
     }
 
     @DeleteMapping("/{kontoId}")
-    @Operation(summary = "Close konto", description = "Closes a konto (balance must be 0, cancels all pending payments) - OWNER only")
-    public ResponseEntity<GenericStatusResponse> closeKonto(
+    @Operation(summary = "Close konto", description = "Closes a konto (balance must be 0, requires mobile approval) - OWNER only")
+    public ResponseEntity<PendingPaymentResponseDTO> closeKonto(
             @AuthenticationPrincipal User currentUser,
-            @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId) {
+            @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
+            @Parameter(description = "Delete details", required = true) @Valid @RequestBody DeleteKontoRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        kontoService.closeKonto(kontoId, currentUser.getId());
-        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+        // Extract IP address from request
+        String ipAddress = httpRequest.getRemoteAddr();
+        String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            ipAddress = forwardedFor.split(",")[0].trim();
+        }
+
+        String mobileVerifyCode = kontoService.createPendingKontoDelete(
+                kontoId,
+                currentUser.getId(),
+                request.getDeviceId(),
+                ipAddress);
+
+        return ResponseEntity.ok(new PendingPaymentResponseDTO(mobileVerifyCode, "PENDING_APPROVAL"));
     }
 
     @PostMapping("/{kontoId}/members")
-    @Operation(summary = "Invite member", description = "Invites a user to the konto by their contract number - OWNER only")
-    public ResponseEntity<GenericStatusResponse> inviteMember(
+    @Operation(summary = "Invite member", description = "Invites a user to the konto by their contract number (requires mobile approval) - OWNER only")
+    public ResponseEntity<PendingPaymentResponseDTO> inviteMember(
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
-            @Parameter(description = "Invitation details", required = true) @Valid @RequestBody InviteMemberRequestDTO request) {
+            @Parameter(description = "Invitation details", required = true) @Valid @RequestBody InviteMemberRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        kontoService.inviteMember(kontoId, currentUser.getId(), request.getContractNumber(), request.getRole());
-        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+        // Extract IP address from request
+        String ipAddress = httpRequest.getRemoteAddr();
+        String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            ipAddress = forwardedFor.split(",")[0].trim();
+        }
+
+        String mobileVerifyCode = kontoService.createPendingMemberInvite(
+                kontoId,
+                currentUser.getId(),
+                request.getContractNumber(),
+                request.getRole(),
+                request.getDeviceId(),
+                ipAddress);
+
+        return ResponseEntity.ok(new PendingPaymentResponseDTO(mobileVerifyCode, "PENDING_APPROVAL"));
     }
 
     @DeleteMapping("/{kontoId}/members/{memberId}")

@@ -61,23 +61,49 @@ public class PaymentController {
     }
 
     @PatchMapping("/{paymentId}")
-    @Operation(summary = "Update payment", description = "Updates a pending payment (only if not locked)")
-    public ResponseEntity<GenericStatusResponse> updatePayment(
+    @Operation(summary = "Update payment", description = "Updates a pending payment (requires mobile approval)")
+    public ResponseEntity<PendingPaymentResponseDTO> updatePayment(
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Payment UUID", required = true) @PathVariable UUID paymentId,
-            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdatePaymentRequestDTO request) {
+            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdatePaymentRequestDTO request,
+            HttpServletRequest httpRequest) {
 
-        paymentService.updatePayment(currentUser.getId(), paymentId, request);
-        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+        String ipAddress = httpRequest.getRemoteAddr();
+        String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            ipAddress = forwardedFor.split(",")[0].trim();
+        }
+
+        String mobileVerifyCode = paymentService.createPendingPaymentUpdate(
+                currentUser.getId(),
+                paymentId,
+                request.getDeviceId(),
+                ipAddress,
+                request);
+
+        return ResponseEntity.ok(new PendingPaymentResponseDTO(mobileVerifyCode, "PENDING_APPROVAL"));
     }
 
     @DeleteMapping("/{paymentId}")
-    @Operation(summary = "Cancel payment", description = "Cancels a pending payment (only if not locked)")
-    public ResponseEntity<GenericStatusResponse> cancelPayment(
+    @Operation(summary = "Cancel payment", description = "Cancels a pending payment (requires mobile approval)")
+    public ResponseEntity<PendingPaymentResponseDTO> cancelPayment(
             @AuthenticationPrincipal User currentUser,
-            @Parameter(description = "Payment UUID", required = true) @PathVariable UUID paymentId) {
+            @Parameter(description = "Payment UUID", required = true) @PathVariable UUID paymentId,
+            @Parameter(description = "Delete details", required = true) @Valid @RequestBody DeletePaymentRequestDTO request,
+            HttpServletRequest httpRequest) {
 
-        paymentService.cancelPayment(currentUser.getId(), paymentId);
-        return ResponseEntity.ok(new GenericStatusResponse("OK"));
+        String ipAddress = httpRequest.getRemoteAddr();
+        String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            ipAddress = forwardedFor.split(",")[0].trim();
+        }
+
+        String mobileVerifyCode = paymentService.createPendingPaymentDelete(
+                currentUser.getId(),
+                paymentId,
+                request.getDeviceId(),
+                ipAddress);
+
+        return ResponseEntity.ok(new PendingPaymentResponseDTO(mobileVerifyCode, "PENDING_APPROVAL"));
     }
 }

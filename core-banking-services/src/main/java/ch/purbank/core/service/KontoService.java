@@ -5,9 +5,11 @@ import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.KontoStatus;
 import ch.purbank.core.domain.enums.MemberRole;
 import ch.purbank.core.domain.enums.PaymentStatus;
+import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import ch.purbank.core.domain.enums.TransactionType;
 import ch.purbank.core.dto.*;
 import ch.purbank.core.repository.*;
+import ch.purbank.core.security.SecureTokenGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +32,10 @@ public class KontoService {
     private final TransactionRepository transactionRepository;
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
+    private final PendingKontoDeleteRepository pendingKontoDeleteRepository;
+    private final PendingMemberInviteRepository pendingMemberInviteRepository;
+
+    private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
     @Transactional
     public Konto createKonto(String name, UUID userId, Currency currency) {
@@ -188,7 +194,7 @@ public class KontoService {
     }
 
     @Transactional
-    public void closeKonto(UUID kontoId, UUID userId) {
+    public String createPendingKontoDelete(UUID kontoId, UUID userId, String deviceId, String ipAddress) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -207,6 +213,40 @@ public class KontoService {
             throw new IllegalArgumentException("Konto cannot be closed. Balance must be exactly 0");
         }
 
+        // Invalidate any pending konto delete requests for this user
+        List<PendingKontoDelete> existingPending = pendingKontoDeleteRepository.findByUserAndStatus(user, PendingPaymentStatus.PENDING);
+        for (PendingKontoDelete existing : existingPending) {
+            existing.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingKontoDeleteRepository.save(existing);
+        }
+
+        // Generate mobile verify code
+        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+
+        // Create pending konto delete
+        PendingKontoDelete pendingDelete = PendingKontoDelete.builder()
+                .user(user)
+                .mobileVerifyCode(mobileVerifyCode)
+                .kontoId(kontoId)
+                .deviceId(deviceId)
+                .ipAddress(ipAddress)
+                .build();
+
+        pendingKontoDeleteRepository.save(pendingDelete);
+        log.info("Created pending konto delete for konto {}", kontoId);
+
+        return mobileVerifyCode;
+    }
+
+    @Transactional
+    protected void executeApprovedKontoDelete(PendingKontoDelete pendingDelete) {
+        Konto konto = kontoRepository.findById(pendingDelete.getKontoId())
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        if (!konto.canBeClosed()) {
+            throw new IllegalArgumentException("Konto cannot be closed. Balance must be exactly 0");
+        }
+
         // Cancel all pending payments
         List<Payment> pendingPayments = paymentRepository.findByKontoAndStatus(konto, PaymentStatus.PENDING);
         for (Payment payment : pendingPayments) {
@@ -217,16 +257,11 @@ public class KontoService {
         konto.close();
         kontoRepository.save(konto);
 
-        log.info("Konto {} closed by user {}", kontoId, userId);
+        log.info("Konto {} closed after approval", konto.getId());
     }
 
     @Transactional
-    public void inviteMember(UUID kontoId, UUID userId, String contractNumber, MemberRole role) {
-        /*
-         * TODO: we should probably let users accept or reject invitations instead of
-         * auto accepting. This probably needs QR CODE part 2 and notifications support
-         * to work. For now just auto accept
-         */
+    public String createPendingMemberInvite(UUID kontoId, UUID userId, String contractNumber, MemberRole role, String deviceId, String ipAddress) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -240,8 +275,48 @@ public class KontoService {
             throw new IllegalArgumentException("Only owners can invite members");
         }
 
+        // Validate that user exists
         User invitee = userRepository.findAll().stream()
                 .filter(u -> u.getContractNumber().equals(contractNumber))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("User with this contract number not found"));
+
+        if (kontoMemberRepository.existsByKontoAndUser(konto, invitee)) {
+            throw new IllegalArgumentException("User is already a member of this konto");
+        }
+
+        // Invalidate any pending member invite requests for this user
+        List<PendingMemberInvite> existingPending = pendingMemberInviteRepository.findByUserAndStatus(inviter, PendingPaymentStatus.PENDING);
+        for (PendingMemberInvite existing : existingPending) {
+            existing.markCompleted(PendingPaymentStatus.EXPIRED);
+            pendingMemberInviteRepository.save(existing);
+        }
+
+        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+
+        PendingMemberInvite pendingInvite = PendingMemberInvite.builder()
+                .user(inviter)
+                .mobileVerifyCode(mobileVerifyCode)
+                .kontoId(kontoId)
+                .contractNumber(contractNumber)
+                .role(role)
+                .deviceId(deviceId)
+                .ipAddress(ipAddress)
+                .build();
+
+        pendingMemberInviteRepository.save(pendingInvite);
+        log.info("Created pending member invite for konto {}", kontoId);
+
+        return mobileVerifyCode;
+    }
+
+    @Transactional
+    protected void executeApprovedMemberInvite(PendingMemberInvite pendingInvite) {
+        Konto konto = kontoRepository.findById(pendingInvite.getKontoId())
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        User invitee = userRepository.findAll().stream()
+                .filter(u -> u.getContractNumber().equals(pendingInvite.getContractNumber()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("User with this contract number not found"));
 
@@ -253,10 +328,10 @@ public class KontoService {
         KontoMember member = new KontoMember();
         member.setKonto(konto);
         member.setUser(invitee);
-        member.setRole(role);
+        member.setRole(pendingInvite.getRole());
         kontoMemberRepository.save(member);
 
-        log.info("User {} invited to konto {} with role {}", invitee.getId(), kontoId, role);
+        log.info("User {} invited to konto {} with role {} after approval", invitee.getId(), konto.getId(), pendingInvite.getRole());
     }
 
     @Transactional
@@ -322,7 +397,7 @@ public class KontoService {
     }
 
     @Transactional
-    public Transaction createTransaction(UUID kontoId, String iban, BigDecimal amount, String message,
+    public Transaction createTransaction(UUID kontoId, String iban, BigDecimal amount, String message, String note,
                                          TransactionType transactionType, Currency currency) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
@@ -331,15 +406,13 @@ public class KontoService {
             throw new IllegalArgumentException("Cannot create transaction for closed konto");
         }
 
-        konto.addToBalance(amount);
-        kontoRepository.save(konto);
-
         Transaction transaction = new Transaction();
         transaction.setKonto(konto);
         transaction.setIban(iban);
         transaction.setAmount(amount);
         transaction.setBalanceAfter(konto.getBalance());
         transaction.setMessage(message);
+        transaction.setNote(note);
         transaction.setTransactionType(transactionType);
         transaction.setCurrency(currency);
 
