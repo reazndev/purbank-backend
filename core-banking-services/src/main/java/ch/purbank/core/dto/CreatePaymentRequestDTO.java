@@ -32,4 +32,7 @@ public class CreatePaymentRequestDTO {
 
     // Required if executionType is NORMAL, ignored if INSTANT
     private LocalDate executionDate;
+
+    @NotBlank(message = "Device ID is required")
+    private String deviceId;
 }

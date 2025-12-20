@@ -41,7 +41,6 @@ public class PaymentController {
     @Operation(summary = "Create payment", description = "Creates a pending payment that requires mobile approval. Returns a mobile-verify code.")
     public ResponseEntity<PendingPaymentResponseDTO> createPayment(
             @AuthenticationPrincipal User currentUser,
-            @Parameter(description = "Device ID for mobile verification", required = true) @RequestParam String deviceId,
             @Parameter(description = "Payment creation details", required = true) @Valid @RequestBody CreatePaymentRequestDTO request,
             HttpServletRequest httpRequest) {
 
@@ -54,7 +53,7 @@ public class PaymentController {
 
         String mobileVerifyCode = paymentService.createPendingPayment(
                 currentUser.getId(),
-                deviceId,
+                request.getDeviceId(),
                 ipAddress,
                 request);
 
