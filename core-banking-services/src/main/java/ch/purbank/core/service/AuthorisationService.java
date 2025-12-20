@@ -84,7 +84,7 @@ public class AuthorisationService {
             return Optional.empty();
         }
 
-        // First check pending payments
+        // Check pending payment
         Optional<PendingPayment> pendingPaymentOpt = pendingPaymentRepository.findByMobileVerifyCodeAndStatus(
                 mobileVerifyCode, PendingPaymentStatus.PENDING);
 
@@ -100,6 +100,78 @@ public class AuthorisationService {
             }
 
             return Optional.of(buildPaymentActionPayload(pendingPayment));
+        }
+
+        // Check pending payment update
+        Optional<PendingPaymentUpdate> pendingUpdateOpt = pendingPaymentUpdateRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingUpdateOpt.isPresent()) {
+            PendingPaymentUpdate pendingUpdate = pendingUpdateOpt.get();
+
+            if (pendingUpdate.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingUpdate.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildPaymentUpdateActionPayload(pendingUpdate));
+        }
+
+        // Check pending payment delete
+        Optional<PendingPaymentDelete> pendingDeleteOpt = pendingPaymentDeleteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingDeleteOpt.isPresent()) {
+            PendingPaymentDelete pendingDelete = pendingDeleteOpt.get();
+
+            if (pendingDelete.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingDelete.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildPaymentDeleteActionPayload(pendingDelete));
+        }
+
+        // Check pending konto delete
+        Optional<PendingKontoDelete> pendingKontoDeleteOpt = pendingKontoDeleteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingKontoDeleteOpt.isPresent()) {
+            PendingKontoDelete pendingKontoDelete = pendingKontoDeleteOpt.get();
+
+            if (pendingKontoDelete.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingKontoDelete.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildKontoDeleteActionPayload(pendingKontoDelete));
+        }
+
+        // Check pending member invite
+        Optional<PendingMemberInvite> pendingInviteOpt = pendingMemberInviteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingInviteOpt.isPresent()) {
+            PendingMemberInvite pendingInvite = pendingInviteOpt.get();
+
+            if (pendingInvite.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingInvite.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildMemberInviteActionPayload(pendingInvite));
         }
 
         // Fall back to checking authorisation requests (for other action types)
@@ -128,6 +200,7 @@ public class AuthorisationService {
             Map<String, Object> payload = new HashMap<>();
             payload.put("type", "PAYMENT");
             payload.put("amount", pendingPayment.getAmount().toString());
+            payload.put("currency", pendingPayment.getPaymentCurrency().toString());
             payload.put("to", pendingPayment.getToIban());
             payload.put("message", pendingPayment.getMessage());
             payload.put("note", pendingPayment.getNote());
@@ -137,6 +210,80 @@ public class AuthorisationService {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
             log.error("Error building payment action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildPaymentUpdateActionPayload(PendingPaymentUpdate pendingUpdate) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "PAYMENT_UPDATE");
+            payload.put("paymentId", pendingUpdate.getPaymentId().toString());
+
+            // Include only fields that are being updated (non-null)
+            if (pendingUpdate.getToIban() != null) {
+                payload.put("toIban", pendingUpdate.getToIban());
+            }
+            if (pendingUpdate.getAmount() != null) {
+                payload.put("amount", pendingUpdate.getAmount().toString());
+            }
+            if (pendingUpdate.getPaymentCurrency() != null) {
+                payload.put("currency", pendingUpdate.getPaymentCurrency().toString());
+            }
+            if (pendingUpdate.getMessage() != null) {
+                payload.put("message", pendingUpdate.getMessage());
+            }
+            if (pendingUpdate.getNote() != null) {
+                payload.put("note", pendingUpdate.getNote());
+            }
+            if (pendingUpdate.getExecutionDate() != null) {
+                payload.put("executionDate", pendingUpdate.getExecutionDate().toString());
+            }
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building payment update action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildPaymentDeleteActionPayload(PendingPaymentDelete pendingDelete) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "PAYMENT_DELETE");
+            payload.put("paymentId", pendingDelete.getPaymentId().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building payment delete action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildKontoDeleteActionPayload(PendingKontoDelete pendingKontoDelete) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "KONTO_DELETE");
+            payload.put("kontoId", pendingKontoDelete.getKontoId().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building konto delete action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildMemberInviteActionPayload(PendingMemberInvite pendingInvite) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "MEMBER_INVITE");
+            payload.put("kontoId", pendingInvite.getKontoId().toString());
+            payload.put("contractNumber", pendingInvite.getContractNumber());
+            payload.put("role", pendingInvite.getRole().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building member invite action payload", e);
             return "{}";
         }
     }
