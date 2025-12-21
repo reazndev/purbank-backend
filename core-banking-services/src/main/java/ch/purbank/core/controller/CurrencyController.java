@@ -3,6 +3,9 @@ package ch.purbank.core.controller;
 import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.dto.CurrencyRateResponseDTO;
 import ch.purbank.core.service.CurrencyConversionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,29 +22,24 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/currencies")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Currency", description = "Currency conversion and exchange rate endpoints")
 public class CurrencyController {
 
     private final CurrencyConversionService currencyConversionService;
 
-    /**
-     * Get all conversion rates
-     * GET /api/v1/currencies/rates
-     */
     @GetMapping("/rates")
+    @Operation(summary = "Get all conversion rates", description = "Returns all available currency conversion rates")
     public ResponseEntity<CurrencyRateResponseDTO> getAllRates() {
         Map<String, BigDecimal> rates = currencyConversionService.getAllRates();
         return ResponseEntity.ok(new CurrencyRateResponseDTO(rates));
     }
 
-    /**
-     * Convert amount between currencies
-     * GET /api/v1/currencies/convert?amount=100&from=CHF&to=EUR
-     */
     @GetMapping("/convert")
+    @Operation(summary = "Convert amount between currencies", description = "Converts an amount from one currency to another using current exchange rates")
     public ResponseEntity<Map<String, Object>> convertCurrency(
-            @RequestParam BigDecimal amount,
-            @RequestParam Currency from,
-            @RequestParam Currency to) {
+            @Parameter(description = "Amount to convert", required = true, example = "100") @RequestParam BigDecimal amount,
+            @Parameter(description = "Source currency", required = true, example = "CHF") @RequestParam Currency from,
+            @Parameter(description = "Target currency", required = true, example = "EUR") @RequestParam Currency to) {
 
         BigDecimal convertedAmount = currencyConversionService.convert(amount, from, to);
 
@@ -53,11 +51,8 @@ public class CurrencyController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Get list of supported currencies
-     * GET /api/v1/currencies
-     */
     @GetMapping("")
+    @Operation(summary = "Get supported currencies", description = "Returns a list of all supported currency codes")
     public ResponseEntity<List<String>> getSupportedCurrencies() {
         List<String> currencies = Arrays.stream(Currency.values())
                 .map(Enum::name)
