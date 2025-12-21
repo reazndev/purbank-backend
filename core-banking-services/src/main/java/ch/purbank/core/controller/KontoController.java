@@ -37,9 +37,12 @@ public class KontoController {
     }
 
     @GetMapping
-    @Operation(summary = "List all konten", description = "Gets a list of all konten the user has access to")
-    public ResponseEntity<List<KontoListItemDTO>> listKonten(@AuthenticationPrincipal User currentUser) {
-        List<KontoListItemDTO> konten = kontoService.getAllKontenForUser(currentUser.getId());
+    @Operation(summary = "List all konten", description = "Gets a list of all konten the user has access to (excludes closed accounts by default)")
+    public ResponseEntity<List<KontoListItemDTO>> listKonten(
+            @AuthenticationPrincipal User currentUser,
+            @Parameter(description = "Include closed konten (true=only closed, false/null=only open)", required = false)
+            @RequestParam(required = false) Boolean includeClosed) {
+        List<KontoListItemDTO> konten = kontoService.getAllKontenForUser(currentUser.getId(), includeClosed);
         return ResponseEntity.ok(konten);
     }
 

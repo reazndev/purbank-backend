@@ -23,6 +23,13 @@ public class AdminUserController {
 
     private final AdminUserService adminUserService;
 
+    @GetMapping
+    @Operation(summary = "Get all users", description = "Retrieves all users in the system (Admin only)")
+    public ResponseEntity<List<User>> getAllUsers() {
+        List<User> users = adminUserService.getAllUsers();
+        return ResponseEntity.ok(users);
+    }
+
     @PostMapping
     @Operation(summary = "Create a new user", description = "Creates a new user in the system")
     public ResponseEntity<User> createUser(

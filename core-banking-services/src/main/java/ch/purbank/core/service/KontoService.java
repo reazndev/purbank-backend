@@ -64,13 +64,22 @@ public class KontoService {
     }
 
     @Transactional(readOnly = true)
-    public List<KontoListItemDTO> getAllKontenForUser(UUID userId) {
+    public List<KontoListItemDTO> getAllKontenForUser(UUID userId, Boolean includeClosed) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         List<KontoMember> memberships = kontoMemberRepository.findByUser(user);
 
         return memberships.stream()
+                .filter(m -> {
+                    // If includeClosed is null or false, show only open accounts
+                    // If includeClosed is true, show only closed accounts
+                    if (includeClosed == null || !includeClosed) {
+                        return m.getKonto().getStatus() == KontoStatus.ACTIVE;
+                    } else {
+                        return m.getKonto().getStatus() == KontoStatus.CLOSED;
+                    }
+                })
                 .map(m -> new KontoListItemDTO(
                         m.getKonto().getId(),
                         m.getKonto().getName(),

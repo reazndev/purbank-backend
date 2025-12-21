@@ -26,8 +26,8 @@ public class UserController {
     private final ActionDecisionService actionDecisionService;
 
     @GetMapping("/users")
-    public ResponseEntity<List<User>> getAllUsers() {
-        return ResponseEntity.ok(userRepository.findAll());
+    public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(currentUser);
     }
 
     @PostMapping("/users")
