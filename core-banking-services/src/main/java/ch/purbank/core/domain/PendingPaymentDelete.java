@@ -18,7 +18,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class PendingPaymentDelete {
+public class PendingPaymentDelete implements PendingRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

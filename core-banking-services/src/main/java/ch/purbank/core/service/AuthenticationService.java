@@ -1,11 +1,20 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.PendingPayment;
+import ch.purbank.core.domain.PendingKontoDelete;
+import ch.purbank.core.domain.PendingMemberInvite;
+import ch.purbank.core.domain.PendingPaymentUpdate;
+import ch.purbank.core.domain.PendingPaymentDelete;
+import ch.purbank.core.domain.PendingRequest;
 import ch.purbank.core.domain.RefreshToken;
 import ch.purbank.core.domain.User;
 import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import ch.purbank.core.dto.*;
 import ch.purbank.core.repository.PendingPaymentRepository;
+import ch.purbank.core.repository.PendingKontoDeleteRepository;
+import ch.purbank.core.repository.PendingMemberInviteRepository;
+import ch.purbank.core.repository.PendingPaymentUpdateRepository;
+import ch.purbank.core.repository.PendingPaymentDeleteRepository;
 import ch.purbank.core.repository.RefreshTokenRepository;
 import ch.purbank.core.repository.UserRepository;
 import ch.purbank.core.security.JwtService;
@@ -19,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
+import org.springframework.data.repository.CrudRepository;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -40,6 +50,10 @@ public class AuthenticationService {
     private final AuthorisationRequestRepository authorisationRepository;
     private final AuthorisationRequestRepository authorisationRequestRepository;
     private final PendingPaymentRepository pendingPaymentRepository;
+    private final PendingKontoDeleteRepository pendingKontoDeleteRepository;
+    private final PendingMemberInviteRepository pendingMemberInviteRepository;
+    private final PendingPaymentUpdateRepository pendingPaymentUpdateRepository;
+    private final PendingPaymentDeleteRepository pendingPaymentDeleteRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -137,29 +151,54 @@ public class AuthenticationService {
             return new AuthStatusResponseDTO(authRequest.getStatus().name());
         }
 
-        // If not found, check pending_payments (for payment approval)
+        // Check pending_payments
         Optional<PendingPayment> pendingPaymentOpt = pendingPaymentRepository
                 .findByMobileVerifyCode(request.getMobileVerify());
-
         if (pendingPaymentOpt.isPresent()) {
-            PendingPayment pendingPayment = pendingPaymentOpt.get();
+            return processPendingRequest(pendingPaymentOpt.get(), request.getDeviceId(), pendingPaymentRepository);
+        }
 
-            if (!pendingPayment.getDeviceId().equals(request.getDeviceId())) {
-                throw new IllegalArgumentException("Device ID mismatch.");
-            }
+        // Check pending_konto_deletes
+        Optional<PendingKontoDelete> pendingKontoDeleteOpt = pendingKontoDeleteRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
+        if (pendingKontoDeleteOpt.isPresent()) {
+            return processPendingRequest(pendingKontoDeleteOpt.get(), request.getDeviceId(), pendingKontoDeleteRepository);
+        }
 
-            if (pendingPayment.isExpired() && pendingPayment.getStatus() == PendingPaymentStatus.PENDING) {
-                pendingPayment.markCompleted(PendingPaymentStatus.EXPIRED);
-                pendingPaymentRepository.save(pendingPayment);
-                return new AuthStatusResponseDTO("EXPIRED");
-            }
+        // Check pending_member_invites
+        Optional<PendingMemberInvite> pendingMemberInviteOpt = pendingMemberInviteRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
+        if (pendingMemberInviteOpt.isPresent()) {
+            return processPendingRequest(pendingMemberInviteOpt.get(), request.getDeviceId(), pendingMemberInviteRepository);
+        }
 
-            // Map PendingPaymentStatus to AuthorisationStatus format
-            String status = pendingPayment.getStatus().name();
-            return new AuthStatusResponseDTO(status);
+        // Check pending_payment_updates
+        Optional<PendingPaymentUpdate> pendingPaymentUpdateOpt = pendingPaymentUpdateRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
+        if (pendingPaymentUpdateOpt.isPresent()) {
+            return processPendingRequest(pendingPaymentUpdateOpt.get(), request.getDeviceId(), pendingPaymentUpdateRepository);
+        }
+
+        // Check pending_payment_deletes
+        Optional<PendingPaymentDelete> pendingPaymentDeleteOpt = pendingPaymentDeleteRepository
+                .findByMobileVerifyCode(request.getMobileVerify());
+        if (pendingPaymentDeleteOpt.isPresent()) {
+            return processPendingRequest(pendingPaymentDeleteOpt.get(), request.getDeviceId(), pendingPaymentDeleteRepository);
         }
 
         throw new IllegalArgumentException("Invalid mobile-verify code or request not found.");
+    }
+
+    private <T extends PendingRequest> AuthStatusResponseDTO processPendingRequest(T pending, String deviceId, CrudRepository<T, ?> repository) {
+        if (!pending.getDeviceId().equals(deviceId)) {
+            throw new IllegalArgumentException("Device ID mismatch.");
+        }
+        if (pending.isExpired() && pending.getStatus() == PendingPaymentStatus.PENDING) {
+            pending.markCompleted(PendingPaymentStatus.EXPIRED);
+            repository.save(pending);
+            return new AuthStatusResponseDTO("EXPIRED");
+        }
+        return new AuthStatusResponseDTO(pending.getStatus().name());
     }
 
     @Transactional

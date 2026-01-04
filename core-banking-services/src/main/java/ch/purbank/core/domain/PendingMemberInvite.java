@@ -19,7 +19,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class PendingMemberInvite {
+public class PendingMemberInvite implements PendingRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

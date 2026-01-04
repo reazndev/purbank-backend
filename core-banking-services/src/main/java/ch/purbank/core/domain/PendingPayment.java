@@ -22,7 +22,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class PendingPayment {
+public class PendingPayment implements PendingRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
