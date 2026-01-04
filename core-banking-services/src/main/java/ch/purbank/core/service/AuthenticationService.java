@@ -47,7 +47,6 @@ public class AuthenticationService {
 
     private final UserRepository repository;
     private final RefreshTokenRepository tokenRepository;
-    private final AuthorisationRequestRepository authorisationRepository;
     private final AuthorisationRequestRepository authorisationRequestRepository;
     private final PendingPaymentRepository pendingPaymentRepository;
     private final PendingKontoDeleteRepository pendingKontoDeleteRepository;
@@ -103,10 +102,10 @@ public class AuthenticationService {
         var user = repository.findByContractNumber(request.getContractNumber())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid contract number or device ID"));
 
-        authorisationRepository.findByUserIdAndStatus(user.getId(), AuthorisationStatus.PENDING)
+        authorisationRequestRepository.findByUserIdAndStatus(user.getId(), AuthorisationStatus.PENDING)
                 .ifPresent(oldRequest -> {
                     oldRequest.markCompleted(AuthorisationStatus.INVALID);
-                    authorisationRepository.save(oldRequest);
+                    authorisationRequestRepository.save(oldRequest);
                     log.warn("Invalidated old PENDING authorisation request for user {}", user.getId());
                 });
 
@@ -122,7 +121,7 @@ public class AuthenticationService {
                 .status(AuthorisationStatus.PENDING)
                 .build();
 
-        authorisationRepository.save(authRequest);
+        authorisationRequestRepository.save(authRequest);
 
         log.info("Mobile login request created for user={} with mobileVerifyCode={}", user.getId(),
                 logToken(mobileVerifyCode));
@@ -132,7 +131,7 @@ public class AuthenticationService {
 
     public AuthStatusResponseDTO checkAuthorisationStatus(AuthStatusRequestDTO request) {
         // First check authorisation_requests (for login)
-        Optional<AuthorisationRequest> authRequestOpt = authorisationRepository
+        Optional<AuthorisationRequest> authRequestOpt = authorisationRequestRepository
                 .findByMobileVerifyCode(request.getMobileVerify());
 
         if (authRequestOpt.isPresent()) {
@@ -144,7 +143,7 @@ public class AuthenticationService {
 
             if (authRequest.isExpired() && authRequest.getStatus() == AuthorisationStatus.PENDING) {
                 authRequest.markCompleted(AuthorisationStatus.INVALID);
-                authorisationRepository.save(authRequest);
+                authorisationRequestRepository.save(authRequest);
                 return new AuthStatusResponseDTO(AuthorisationStatus.INVALID.name());
             }
 
@@ -203,7 +202,7 @@ public class AuthenticationService {
 
     @Transactional
     public AuthenticationResponseDTO getRefreshToken(MobileRefreshTokenRequestDTO request) {
-        AuthorisationRequest authRequest = authorisationRepository.findByMobileVerifyCode(request.getMobileVerify())
+        AuthorisationRequest authRequest = authorisationRequestRepository.findByMobileVerifyCode(request.getMobileVerify())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid mobile-verify code."));
 
         if (!authRequest.getDeviceId().equals(request.getDeviceId())) {
@@ -224,7 +223,7 @@ public class AuthenticationService {
         }
 
         authRequest.markCompleted(AuthorisationStatus.INVALID);
-        authorisationRepository.save(authRequest);
+        authorisationRequestRepository.save(authRequest);
 
         tokenRepository.deleteByUser(user);
 
