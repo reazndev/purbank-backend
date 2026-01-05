@@ -31,7 +31,7 @@ The easiest way to run the entire Purbank stack is using Docker Compose. This wi
 You can set the environment variables like this:
 ```bash
    export MAIL_PASSWORD="your-mail-password"
-   export JWT_PRIVATE_KEY="32-PLUS-CHAR-RANDOM-SECURE-JWT_SECRET"
+   export JWT_SECRET_KEY="32-PLUS-CHAR-RANDOM-SECURE-JWT_SECRET"
 ```
 
 or also just directly overwrite them in the docker compose for testing/dev.
