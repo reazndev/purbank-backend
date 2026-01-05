@@ -2,6 +2,7 @@ package ch.purbank.core.config;
 
 import ch.purbank.core.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -27,10 +28,12 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
 
+    @Value("${application.security.cors.enabled:false}")
+    private boolean corsEnabled;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // TODO: ONLY TEMP FOR DEV!!! REMOVE AFTER HOSTING
                 .csrf(AbstractHttpConfigurer::disable) // TODO: enable again after dev done
                 .authorizeHttpRequests(auth -> auth
 
@@ -46,14 +49,20 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
+        // Only enable CORS if configured (dev environment)
+        if (corsEnabled) {
+            http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        } else {
+            http.cors(AbstractHttpConfigurer::disable);
+        }
+
         return http.build();
     }
 
     @Bean
-    // TODO: ONLY TEMP FOR DEV!!! REMOVE AFTER HOSTING
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("*")); // Allow all origins
+        configuration.setAllowedOrigins(List.of("*")); // Allow all origins (dev only)
         configuration.setAllowedMethods(List.of("*")); // Allow all methods
         configuration.setAllowedHeaders(List.of("*")); // Allow all headers
         configuration.setAllowCredentials(false); // Must be false when using "*" for origins

@@ -592,4 +592,130 @@ public class PaymentService {
                 payment.getStatus(),
                 payment.isLocked());
     }
+
+    // ===== ADMIN METHODS =====
+
+    @Transactional(readOnly = true)
+    public List<PaymentDTO> getPendingPaymentsForKontoAdmin(UUID kontoId) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        List<Payment> payments = paymentRepository.findByKontoAndStatus(konto, PaymentStatus.PENDING);
+
+        return payments.stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Payment createPaymentAdmin(UUID userId, CreatePaymentRequestDTO request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Konto konto = kontoRepository.findById(request.getKontoId())
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        if (konto.getStatus() != KontoStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cannot create payment for closed konto");
+        }
+
+        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive");
+        }
+
+        // For INSTANT payments, check if konto has sufficient funds
+        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+            if (konto.getBalance().compareTo(request.getAmount()) < 0) {
+                throw new IllegalArgumentException("Insufficient funds for instant payment");
+            }
+        }
+
+        Payment payment = new Payment();
+        payment.setKonto(konto);
+        payment.setToIban(request.getToIban());
+        payment.setAmount(request.getAmount());
+        payment.setPaymentCurrency(request.getPaymentCurrency() != null ?
+                request.getPaymentCurrency() : Currency.CHF);
+        payment.setMessage(request.getMessage());
+        payment.setNote(request.getNote());
+        payment.setExecutionType(request.getExecutionType());
+
+        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+            payment.setExecutionDate(LocalDate.now());
+        } else {
+            if (request.getExecutionDate() == null) {
+                throw new IllegalArgumentException("Execution date required for normal payments");
+            }
+            if (request.getExecutionDate().isBefore(LocalDate.now())) {
+                throw new IllegalArgumentException("Execution date cannot be in the past");
+            }
+            payment.setExecutionDate(request.getExecutionDate());
+        }
+
+        payment = paymentRepository.save(payment);
+
+        // If INSTANT, execute immediately
+        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+            executePayment(payment);
+        }
+
+        log.info("Admin created payment: {} for konto {}", payment.getId(), konto.getId());
+        return payment;
+    }
+
+    @Transactional
+    public void updatePaymentAdmin(UUID paymentId, UpdatePaymentRequestDTO request) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (!payment.canBeModified()) {
+            throw new IllegalArgumentException("Payment cannot be modified (locked or not pending)");
+        }
+
+        // Validate update data
+        if (request.getAmount() != null && request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive");
+        }
+        if (request.getExecutionDate() != null && request.getExecutionDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Execution date cannot be in the past");
+        }
+
+        // Update fields
+        if (request.getToIban() != null) {
+            payment.setToIban(request.getToIban());
+        }
+        if (request.getAmount() != null) {
+            payment.setAmount(request.getAmount());
+        }
+        if (request.getPaymentCurrency() != null) {
+            payment.setPaymentCurrency(request.getPaymentCurrency());
+        }
+        if (request.getMessage() != null) {
+            payment.setMessage(request.getMessage());
+        }
+        if (request.getNote() != null) {
+            payment.setNote(request.getNote());
+        }
+        if (request.getExecutionDate() != null) {
+            payment.setExecutionDate(request.getExecutionDate());
+        }
+
+        paymentRepository.save(payment);
+        log.info("Admin updated payment {}", paymentId);
+    }
+
+    @Transactional
+    public void cancelPaymentAdmin(UUID paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            throw new IllegalArgumentException("Only pending payments can be cancelled");
+        }
+
+        payment.cancel();
+        paymentRepository.save(payment);
+
+        log.info("Admin cancelled payment {}", paymentId);
+    }
 }

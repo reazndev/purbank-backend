@@ -44,6 +44,15 @@ public class KontoService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        // Check if user has reached max konto limit (200)
+        long kontoCount = kontoMemberRepository.findByUser(user).stream()
+                .filter(m -> m.getKonto().getStatus() == KontoStatus.ACTIVE)
+                .count();
+
+        if (kontoCount >= 200) {
+            throw new IllegalArgumentException("Maximum konto limit of 200 reached");
+        }
+
         Konto konto = new Konto();
         konto.setName(name);
         if (currency != null) {
@@ -426,5 +435,88 @@ public class KontoService {
         transaction.setCurrency(currency);
 
         return transactionRepository.save(transaction);
+    }
+
+    // ===== ADMIN METHODS =====
+
+    @Transactional(readOnly = true)
+    public KontoDetailDTO getKontoDetailAdmin(UUID kontoId) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        // Get first member for role display (admin doesn't have a specific role)
+        KontoMember firstMember = kontoMemberRepository.findByKonto(konto).stream()
+                .findFirst()
+                .orElse(null);
+
+        MemberRole displayRole = firstMember != null ? firstMember.getRole() : MemberRole.VIEWER;
+
+        return new KontoDetailDTO(
+                konto.getId(),
+                konto.getName(),
+                konto.getBalance(),
+                displayRole,
+                konto.getZinssatz(),
+                konto.getIban(),
+                konto.getCurrency(),
+                konto.getStatus(),
+                konto.getCreatedAt(),
+                konto.getClosedAt());
+    }
+
+    @Transactional
+    public void updateKontoAdmin(UUID kontoId, UpdateKontoRequestDTO request, BigDecimal balanceAdjustment) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        if (request.getName() != null && !request.getName().isBlank()) {
+            konto.setName(request.getName());
+        }
+
+        if (balanceAdjustment != null && balanceAdjustment.compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal newBalance = konto.getBalance().add(balanceAdjustment);
+            konto.setBalance(newBalance);
+            log.info("Admin adjusted konto {} balance by {}, new balance: {}", kontoId, balanceAdjustment, newBalance);
+        }
+
+        kontoRepository.save(konto);
+    }
+
+    @Transactional
+    public void closeKontoAdmin(UUID kontoId) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        if (!konto.canBeClosed()) {
+            throw new IllegalArgumentException("Konto cannot be closed. Balance must be exactly 0");
+        }
+
+        // Cancel all pending payments
+        List<Payment> pendingPayments = paymentRepository.findByKontoAndStatus(konto, PaymentStatus.PENDING);
+        for (Payment payment : pendingPayments) {
+            payment.cancel();
+            paymentRepository.save(payment);
+        }
+
+        konto.close();
+        kontoRepository.save(konto);
+
+        log.info("Admin closed konto {}", konto.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<MemberDTO> getMembersAdmin(UUID kontoId) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        List<KontoMember> members = kontoMemberRepository.findByKonto(konto);
+
+        return members.stream()
+                .map(m -> new MemberDTO(
+                        m.getId(),
+                        m.getUser().getFirstName() + " " + m.getUser().getLastName(),
+                        m.getUser().getEmail(),
+                        m.getRole()))
+                .collect(Collectors.toList());
     }
 }
