@@ -2,6 +2,8 @@ package ch.purbank.core.service;
 
 import ch.purbank.core.domain.Konto;
 import ch.purbank.core.domain.Transaction;
+import ch.purbank.core.domain.enums.AuditAction;
+import ch.purbank.core.domain.enums.AuditEntityType;
 import ch.purbank.core.domain.enums.KontoStatus;
 import ch.purbank.core.domain.enums.TransactionType;
 import ch.purbank.core.repository.KontoRepository;
@@ -23,6 +25,7 @@ public class InterestService {
 
     private final KontoRepository kontoRepository;
     private final TransactionRepository transactionRepository;
+    private final AuditLogService auditLogService;
 
     /**
      * Calculates and accrues daily interest for all active konten.
@@ -67,6 +70,16 @@ public class InterestService {
         }
 
         log.info("Daily interest calculation completed. Processed {} konten", processedCount);
+
+        // Audit log daily interest calculation
+        if (processedCount > 0) {
+            auditLogService.logSystem(
+                    AuditAction.INTEREST_CALCULATED,
+                    AuditEntityType.SYSTEM,
+                    null,
+                    String.format("Daily interest calculated for %d konten on %s", processedCount, today)
+            );
+        }
     }
 
     /**
@@ -123,6 +136,17 @@ public class InterestService {
 
         log.info("Quarterly Abrechnung completed. Processed {} konten, total interest paid: {}",
                 processedCount, totalInterestPaid);
+
+        // Audit log quarterly interest
+        if (processedCount > 0) {
+            auditLogService.logSystem(
+                    AuditAction.QUARTERLY_INTEREST_SETTLEMENT,
+                    AuditEntityType.SYSTEM,
+                    null,
+                    String.format("Quarterly interest settlement completed: %d konten processed, total interest paid: %s",
+                            processedCount, totalInterestPaid)
+            );
+        }
     }
 
     /**

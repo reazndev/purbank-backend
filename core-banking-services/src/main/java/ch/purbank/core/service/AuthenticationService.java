@@ -7,6 +7,8 @@ import ch.purbank.core.domain.PendingKontoDelete;
 import ch.purbank.core.domain.PendingMemberInvite;
 import ch.purbank.core.domain.RefreshToken;
 import ch.purbank.core.domain.User;
+import ch.purbank.core.domain.enums.AuditAction;
+import ch.purbank.core.domain.enums.AuditEntityType;
 import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import ch.purbank.core.dto.*;
 import ch.purbank.core.repository.PendingPaymentRepository;
@@ -55,6 +57,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final AuditLogService auditLogService;
 
     @Value("${application.security.jwt.refresh-token.expiration}")
     private long refreshExpirationMs;
@@ -70,62 +73,111 @@ public class AuthenticationService {
 
     @Transactional
     public AuthenticationResponseDTO authenticate(AuthenticationRequestDTO request) {
-        var user = repository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        User user = null;
+        try {
+            user = repository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
-        } else if (user.getPassword() == null || user.getPassword().isEmpty()) {
-            log.info("Passwordless user logged in via external validation: {}", user.getEmail());
-        } else {
-            throw new IllegalStateException("Authentication failed: Missing credentials for user role.");
+            if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+                authenticationManager.authenticate(
+                        new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+            } else if (user.getPassword() == null || user.getPassword().isEmpty()) {
+                log.info("Passwordless user logged in via external validation: {}", user.getEmail());
+            } else {
+                throw new IllegalStateException("Authentication failed: Missing credentials for user role.");
+            }
+
+            var jwtToken = jwtService.generateToken(user);
+
+            tokenRepository.deleteByUser(user);
+
+            var refreshToken = createRefreshToken(user);
+
+            auditLogService.logSuccess(
+                    AuditAction.LOGIN,
+                    AuditEntityType.USER,
+                    user.getId(),
+                    user,
+                    null,
+                    "Password-based login successful"
+            );
+
+            return AuthenticationResponseDTO.builder()
+                    .accessToken(jwtToken)
+                    .refreshToken(refreshToken.getToken())
+                    .build();
+        } catch (Exception e) {
+            auditLogService.logFailure(
+                    AuditAction.LOGIN_FAILED,
+                    AuditEntityType.USER,
+                    user != null ? user.getId() : null,
+                    user,
+                    null,
+                    "Login attempt with email: " + request.getEmail(),
+                    e.getMessage()
+            );
+            throw e;
         }
-
-        var jwtToken = jwtService.generateToken(user);
-
-        tokenRepository.deleteByUser(user);
-
-        var refreshToken = createRefreshToken(user);
-
-        return AuthenticationResponseDTO.builder()
-                .accessToken(jwtToken)
-                .refreshToken(refreshToken.getToken())
-                .build();
     }
 
     @Transactional
     public MobileLoginResponseDTO mobileLogin(MobileLoginRequestDTO request, String ipAddress) {
         log.info("mobileLogin initiated for contract={} from ip={}", request.getContractNumber(), ipAddress);
 
-        var user = repository.findByContractNumber(request.getContractNumber())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid contract number or device ID"));
+        User user = null;
+        try {
+            user = repository.findByContractNumber(request.getContractNumber())
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid contract number or device ID"));
 
-        authorisationRepository.findByUserIdAndStatus(user.getId(), AuthorisationStatus.PENDING)
-                .ifPresent(oldRequest -> {
-                    oldRequest.markCompleted(AuthorisationStatus.INVALID);
-                    authorisationRepository.save(oldRequest);
-                    log.warn("Invalidated old PENDING authorisation request for user {}", user.getId());
-                });
+            User finalUser = user;
+            authorisationRepository.findByUserIdAndStatus(user.getId(), AuthorisationStatus.PENDING)
+                    .ifPresent(oldRequest -> {
+                        oldRequest.markCompleted(AuthorisationStatus.INVALID);
+                        authorisationRepository.save(oldRequest);
+                        log.warn("Invalidated old PENDING authorisation request for user {}", finalUser.getId());
+                    });
 
-        String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
+            String mobileVerifyCode = SecureTokenGenerator.generateToken(MOBILE_VERIFY_TOKEN_LENGTH);
 
-        AuthorisationRequest authRequest = AuthorisationRequest.builder()
-                .user(user)
-                .mobileVerifyCode(mobileVerifyCode)
-                .deviceId(request.getDeviceId())
-                .actionType("LOGIN")
-                .ipAddress(ipAddress)
-                .actionPayload("{\"ip-address\": \"" + ipAddress + "\", \"ip-location\": \"Pending geolocation\"}")
-                .status(AuthorisationStatus.PENDING)
-                .build();
+            AuthorisationRequest authRequest = AuthorisationRequest.builder()
+                    .user(user)
+                    .mobileVerifyCode(mobileVerifyCode)
+                    .deviceId(request.getDeviceId())
+                    .actionType("LOGIN")
+                    .ipAddress(ipAddress)
+                    .actionPayload("{\"ip-address\": \"" + ipAddress + "\", \"ip-location\": \"Pending geolocation\"}")
+                    .status(AuthorisationStatus.PENDING)
+                    .build();
 
-        authorisationRepository.save(authRequest);
+            authorisationRepository.save(authRequest);
 
-        log.info("Mobile login request created for user={} with mobileVerifyCode={}", user.getId(),
-                logToken(mobileVerifyCode));
+            log.info("Mobile login request created for user={} with mobileVerifyCode={}", user.getId(),
+                    logToken(mobileVerifyCode));
 
-        return new MobileLoginResponseDTO(mobileVerifyCode, "PENDING");
+            // Audit log mobile login request
+            auditLogService.logSuccess(
+                    AuditAction.AUTHORISATION_REQUESTED,
+                    AuditEntityType.AUTHORISATION_REQUEST,
+                    authRequest.getId(),
+                    user,
+                    ipAddress,
+                    "Mobile login authorisation requested for device: " + request.getDeviceId()
+            );
+
+            return new MobileLoginResponseDTO(mobileVerifyCode, "PENDING");
+        } catch (Exception e) {
+            // Audit log failed mobile login attempt
+            auditLogService.logFailure(
+                    AuditAction.LOGIN_FAILED,
+                    AuditEntityType.USER,
+                    user != null ? user.getId() : null,
+                    user,
+                    ipAddress,
+                    "Mobile login attempt with contract: " + request.getContractNumber(),
+                    e.getMessage()
+            );
+            throw e;
+        }
     }
 
     public AuthStatusResponseDTO checkAuthorisationStatus(AuthStatusRequestDTO request) {
@@ -284,6 +336,16 @@ public class AuthenticationService {
 
         log.info("Successfully issued tokens for user {} via mobile verification.", user.getId());
 
+        // Audit log successful mobile login
+        auditLogService.logSuccess(
+                AuditAction.LOGIN,
+                AuditEntityType.USER,
+                user.getId(),
+                user,
+                authRequest.getIpAddress(),
+                "Mobile login completed successfully via authorisation"
+        );
+
         return AuthenticationResponseDTO.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken.getToken())
@@ -318,6 +380,16 @@ public class AuthenticationService {
         refreshToken.setExpiryDate(Instant.now().plusMillis(refreshExpirationMs));
         tokenRepository.save(refreshToken);
 
+        // Audit log token refresh
+        auditLogService.logSuccess(
+                AuditAction.TOKEN_REFRESHED,
+                AuditEntityType.USER,
+                user.getId(),
+                user,
+                null,
+                "Access token refreshed successfully"
+        );
+
         return AuthenticationResponseDTO.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken.getToken())
@@ -344,6 +416,16 @@ public class AuthenticationService {
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         repository.save(user);
+
+        // Audit log password change
+        auditLogService.logSuccess(
+                AuditAction.PASSWORD_CHANGED,
+                AuditEntityType.USER,
+                user.getId(),
+                user,
+                null,
+                "Admin password changed successfully"
+        );
     }
 
     private RefreshToken createRefreshToken(User user) {

@@ -32,6 +32,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final KontoService kontoService;
     private final CurrencyConversionService currencyConversionService;
+    private final AuditLogService auditLogService;
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
@@ -575,6 +576,20 @@ public class PaymentService {
         pendingPaymentRepository.save(pendingPayment);
 
         log.info("Payment {} created and approved from pending payment {}", payment.getId(), pendingPayment.getId());
+
+        // Audit log payment approval and creation
+        auditLogService.logSuccess(
+                AuditAction.PAYMENT_APPROVED,
+                AuditEntityType.PAYMENT,
+                payment.getId(),
+                user,
+                pendingPayment.getIpAddress(),
+                String.format("Payment of %s %s to %s approved and %s",
+                        pendingPayment.getAmount(), pendingPayment.getPaymentCurrency(),
+                        pendingPayment.getToIban(),
+                        pendingPayment.getExecutionType() == PaymentExecutionType.INSTANT ? "executed immediately" : "scheduled for " + pendingPayment.getExecutionDate())
+        );
+
         return payment;
     }
 

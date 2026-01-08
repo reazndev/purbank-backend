@@ -1,6 +1,8 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.*;
+import ch.purbank.core.domain.enums.AuditAction;
+import ch.purbank.core.domain.enums.AuditEntityType;
 import ch.purbank.core.domain.enums.Currency;
 import ch.purbank.core.domain.enums.KontoStatus;
 import ch.purbank.core.domain.enums.MemberRole;
@@ -34,6 +36,7 @@ public class KontoService {
     private final UserRepository userRepository;
     private final PendingKontoDeleteRepository pendingKontoDeleteRepository;
     private final PendingMemberInviteRepository pendingMemberInviteRepository;
+    private final AuditLogService auditLogService;
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
@@ -69,6 +72,16 @@ public class KontoService {
         kontoMemberRepository.save(member);
 
         log.info("Konto created with ID: {}", konto.getId());
+
+        auditLogService.logSuccess(
+                AuditAction.KONTO_CREATED,
+                AuditEntityType.KONTO,
+                konto.getId(),
+                user,
+                null,
+                String.format("Konto '%s' created with IBAN %s, currency %s", name, konto.getIban(), currency)
+        );
+
         return konto;
     }
 
@@ -187,6 +200,16 @@ public class KontoService {
 
         transaction.setNote(note);
         transactionRepository.save(transaction);
+
+        // Audit log transaction note update
+        auditLogService.logSuccess(
+                AuditAction.TRANSACTION_UPDATED,
+                AuditEntityType.TRANSACTION,
+                transactionId,
+                user,
+                null,
+                String.format("Transaction note updated on konto %s", konto.getIban())
+        );
     }
 
     @Transactional
@@ -210,6 +233,16 @@ public class KontoService {
         }
 
         kontoRepository.save(konto);
+
+        // Audit log konto update
+        auditLogService.logSuccess(
+                AuditAction.KONTO_UPDATED,
+                AuditEntityType.KONTO,
+                kontoId,
+                user,
+                null,
+                String.format("Konto details updated: %s", request.getName() != null ? "name changed to '" + request.getName() + "'" : "")
+        );
     }
 
     @Transactional
@@ -277,6 +310,16 @@ public class KontoService {
         kontoRepository.save(konto);
 
         log.info("Konto {} closed after approval", konto.getId());
+
+        // Audit log konto closure
+        auditLogService.logSuccess(
+                AuditAction.KONTO_CLOSED,
+                AuditEntityType.KONTO,
+                konto.getId(),
+                pendingDelete.getUser(),
+                pendingDelete.getIpAddress(),
+                String.format("Konto %s closed after mobile approval", konto.getIban())
+        );
     }
 
     @Transactional
@@ -351,6 +394,16 @@ public class KontoService {
         kontoMemberRepository.save(member);
 
         log.info("User {} invited to konto {} with role {} after approval", invitee.getId(), konto.getId(), pendingInvite.getRole());
+
+        // Audit log member addition
+        auditLogService.logSuccess(
+                AuditAction.KONTO_MEMBER_ADDED,
+                AuditEntityType.KONTO_MEMBER,
+                member.getId(),
+                pendingInvite.getUser(),
+                pendingInvite.getIpAddress(),
+                String.format("User %s (%s) added to konto %s with role %s", invitee.getEmail(), invitee.getContractNumber(), konto.getIban(), pendingInvite.getRole())
+        );
     }
 
     @Transactional
@@ -389,6 +442,16 @@ public class KontoService {
 
         kontoMemberRepository.delete(targetMembership);
         log.info("Member {} removed from konto {}", memberId, kontoId);
+
+        // Audit log member removal
+        auditLogService.logSuccess(
+                AuditAction.KONTO_MEMBER_REMOVED,
+                AuditEntityType.KONTO_MEMBER,
+                memberId,
+                user,
+                null,
+                String.format("Member %s removed from konto %s%s", targetMembership.getUser().getEmail(), konto.getIban(), isSelfRemoval ? " (self-removal)" : "")
+        );
     }
 
     @Transactional(readOnly = true)
@@ -435,7 +498,17 @@ public class KontoService {
         transaction.setTransactionType(transactionType);
         transaction.setCurrency(currency);
 
-        return transactionRepository.save(transaction);
+        Transaction saved = transactionRepository.save(transaction);
+
+        // Audit log transaction creation
+        auditLogService.logSystem(
+                AuditAction.TRANSACTION_CREATED,
+                AuditEntityType.TRANSACTION,
+                saved.getId(),
+                String.format("Transaction created on konto %s: %s %s %s, type %s", konto.getIban(), amount, currency, iban, transactionType)
+        );
+
+        return saved;
     }
 
     // ===== ADMIN METHODS =====
@@ -525,22 +598,58 @@ public class KontoService {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
+        StringBuilder auditDetails = new StringBuilder();
+
         if (request.getName() != null && !request.getName().isBlank()) {
+            auditDetails.append("name changed to '").append(request.getName()).append("'; ");
             konto.setName(request.getName());
         }
 
         if (request.getZinssatz() != null) {
+            auditDetails.append("interest rate changed from ").append(konto.getZinssatz())
+                    .append(" to ").append(request.getZinssatz()).append("; ");
             konto.setZinssatz(request.getZinssatz());
             log.info("Admin updated konto {} zinssatz to {}", kontoId, request.getZinssatz());
+
+            // Audit log interest rate change
+            auditLogService.logSystem(
+                    AuditAction.KONTO_INTEREST_RATE_CHANGED,
+                    AuditEntityType.KONTO,
+                    kontoId,
+                    String.format("Admin changed interest rate for konto %s from %s to %s",
+                            konto.getIban(), konto.getZinssatz(), request.getZinssatz())
+            );
         }
 
         if (balanceAdjustment != null && balanceAdjustment.compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal newBalance = konto.getBalance().add(balanceAdjustment);
+            BigDecimal oldBalance = konto.getBalance();
+            BigDecimal newBalance = oldBalance.add(balanceAdjustment);
+            auditDetails.append("balance adjusted by ").append(balanceAdjustment)
+                    .append(" from ").append(oldBalance).append(" to ").append(newBalance).append("; ");
             konto.setBalance(newBalance);
             log.info("Admin adjusted konto {} balance by {}, new balance: {}", kontoId, balanceAdjustment, newBalance);
+
+            // Audit log balance adjustment
+            auditLogService.logSystem(
+                    AuditAction.KONTO_BALANCE_ADJUSTED,
+                    AuditEntityType.KONTO,
+                    kontoId,
+                    String.format("Admin adjusted balance for konto %s by %s %s (from %s to %s)",
+                            konto.getIban(), balanceAdjustment, konto.getCurrency(), oldBalance, newBalance)
+            );
         }
 
         kontoRepository.save(konto);
+
+        // Audit log general konto update if other changes were made
+        if (auditDetails.length() > 0) {
+            auditLogService.logSystem(
+                    AuditAction.KONTO_UPDATED,
+                    AuditEntityType.KONTO,
+                    kontoId,
+                    "Admin updated konto " + konto.getIban() + ": " + auditDetails.toString()
+            );
+        }
     }
 
     @Transactional
@@ -563,6 +672,14 @@ public class KontoService {
         kontoRepository.save(konto);
 
         log.info("Admin closed konto {}", konto.getId());
+
+        // Audit log konto closure by admin
+        auditLogService.logSystem(
+                AuditAction.KONTO_CLOSED,
+                AuditEntityType.KONTO,
+                kontoId,
+                String.format("Admin closed konto %s", konto.getIban())
+        );
     }
 
     @Transactional(readOnly = true)

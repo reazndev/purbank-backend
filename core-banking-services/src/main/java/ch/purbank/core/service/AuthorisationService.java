@@ -1,6 +1,8 @@
 package ch.purbank.core.service;
 
 import ch.purbank.core.domain.*;
+import ch.purbank.core.domain.enums.AuditAction;
+import ch.purbank.core.domain.enums.AuditEntityType;
 import ch.purbank.core.domain.enums.AuthorisationStatus;
 import ch.purbank.core.domain.enums.PendingPaymentStatus;
 import ch.purbank.core.repository.*;
@@ -30,6 +32,7 @@ public class AuthorisationService {
     private final MobileSecurityService mobileSecurityService;
     private final ActionExecutionService actionExecutionService;
     private final ObjectMapper objectMapper;
+    private final AuditLogService auditLogService;
 
     public AuthorisationService(AuthorisationRequestRepository authorisationRequestRepository,
                                 PendingPaymentRepository pendingPaymentRepository,
@@ -39,7 +42,8 @@ public class AuthorisationService {
                                 PendingMemberInviteRepository pendingMemberInviteRepository,
                                 MobileSecurityService mobileSecurityService,
                                 ActionExecutionService actionExecutionService,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                AuditLogService auditLogService) {
         this.authorisationRequestRepository = authorisationRequestRepository;
         this.pendingPaymentRepository = pendingPaymentRepository;
         this.pendingPaymentUpdateRepository = pendingPaymentUpdateRepository;
@@ -49,6 +53,7 @@ public class AuthorisationService {
         this.mobileSecurityService = mobileSecurityService;
         this.actionExecutionService = actionExecutionService;
         this.objectMapper = objectMapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -433,6 +438,20 @@ public class AuthorisationService {
 
         request.markCompleted(newStatus);
         authorisationRequestRepository.save(request);
+
+        // Audit log authorisation approval/rejection
+        AuditAction auditAction = (newStatus == AuthorisationStatus.APPROVED) ?
+                AuditAction.AUTHORISATION_APPROVED : AuditAction.AUTHORISATION_REJECTED;
+
+        auditLogService.logSuccess(
+                auditAction,
+                AuditEntityType.AUTHORISATION_REQUEST,
+                request.getId(),
+                request.getUser(),
+                null,
+                "Authorisation " + (newStatus == AuthorisationStatus.APPROVED ? "approved" : "rejected") +
+                        " for action: " + request.getActionType()
+        );
 
         if (newStatus == AuthorisationStatus.APPROVED) {
             actionExecutionService.executeAction(request);
