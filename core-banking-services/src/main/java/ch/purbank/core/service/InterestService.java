@@ -53,8 +53,7 @@ public class InterestService {
 
             // Calculate daily interest: balance × (annual_rate / 365)
             BigDecimal dailyInterest = balance
-                    .multiply(annualRate)
-                    .divide(BigDecimal.valueOf(365), 4, RoundingMode.HALF_UP);
+                    .multiply(annualRate).divide(BigDecimal.valueOf(365), 8);
 
             // Add to accrued interest
             konto.setAccruedInterest(konto.getAccruedInterest().add(dailyInterest));
