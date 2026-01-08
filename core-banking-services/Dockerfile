@@ -24,7 +24,7 @@ RUN gradle build --no-daemon -x test && \
 # ============================================
 # Development Target
 # ============================================
-FROM eclipse-temurin:21-jre-alpine AS development
+FROM eclipse-temurin:21.0.9_10-jre-alpine AS development
 
 LABEL maintainer="Purbank Dev Team <dev@purbank.ch>"
 LABEL org.opencontainers.image.title="Purbank Core Banking Service (Development)"
@@ -67,7 +67,7 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 # ============================================
 # Production Target
 # ============================================
-FROM eclipse-temurin:21-jre-alpine AS production
+FROM eclipse-temurin:21.0.9_10-jre-alpine AS production
 
 LABEL maintainer="Purbank Dev Team <dev@purbank.ch>"
 LABEL org.opencontainers.image.title="Purbank Core Banking Service"
