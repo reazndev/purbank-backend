@@ -5,6 +5,7 @@ import ch.purbank.core.domain.enums.KontoStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +26,13 @@ public class Konto {
     private BigDecimal balance = BigDecimal.ZERO;
 
     @Column(nullable = false, precision = 5, scale = 4)
-    private BigDecimal zinssatz = new BigDecimal("0.0100"); // TODO: how do we handle zinse? apply them? set them?
+    private BigDecimal zinssatz = new BigDecimal("0.0100"); // Annual interest rate (e.g., 0.0100 = 1%)
+
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal accruedInterest = BigDecimal.ZERO; // Accumulated daily interest, reset at Abrechnung
+
+    @Column
+    private LocalDate lastInterestCalcDate; // Last date when daily interest was calculated
 
     @Column(nullable = false, unique = true)
     private String iban;
