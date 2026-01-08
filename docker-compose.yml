@@ -49,8 +49,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/purbank
       SPRING_DATASOURCE_USERNAME: purbank_user
       SPRING_DATASOURCE_PASSWORD: dev_password
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_PASSWORD: ${MAIL_PASSWORD} # or for testing/dev write it in here
       SPRING_PROFILES_ACTIVE: dev
+      JWT_PRIVATE_KEY: ${JWT_SECRET_KEY} # or for testing/dev write it in here
+      CORS_ENABLE: false # or for testing/dev write it in here
     depends_on:
       postgres:
         condition: service_healthy

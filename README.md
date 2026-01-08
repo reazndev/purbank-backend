@@ -28,8 +28,17 @@ The easiest way to run the entire Purbank stack is using Docker Compose. This wi
 - PgAdmin (database management UI)
 - Purbank backend API (latest main branch from GitHub Container Registry)
 
+You can set the environment variables like this:
 ```bash
    export MAIL_PASSWORD="your-mail-password"
+   export JWT_SECRET_KEY="32-PLUS-CHAR-RANDOM-SECURE-JWT_SECRET"
+```
+
+or also just directly overwrite them in the docker compose for testing/dev.
+
+Then start the server:
+
+```bash
    sudo docker compose pull
    sudo docker compose up -d
 ```

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
+import java.security.SecureRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -27,8 +28,13 @@ public class AdminUserService {
 			throw new IllegalArgumentException("A user with this email already exists.");
 		}
 
+		// Auto-generate contract number if not provided
+		if (user.getContractNumber() == null || user.getContractNumber().isEmpty()) {
+			user.setContractNumber(generateUniqueContractNumber());
+		}
+
 		if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-    	user.setPassword(passwordEncoder.encode(user.getPassword()));
+			user.setPassword(passwordEncoder.encode(user.getPassword()));
 		}
 
 		if (user.getRole() == null) {
@@ -37,8 +43,32 @@ public class AdminUserService {
 		return userRepository.save(user);
 	}
 
+	private String generateUniqueContractNumber() {
+		SecureRandom random = new SecureRandom();
+		String contractNumber;
+		int attempts = 0;
+		int maxAttempts = 100;
+
+		do {
+			// Generate 8-digit contract number
+			int number = 10000000 + random.nextInt(90000000);
+			contractNumber = String.valueOf(number);
+			attempts++;
+
+			if (attempts >= maxAttempts) {
+				throw new IllegalStateException("Unable to generate unique contract number after " + maxAttempts + " attempts");
+			}
+		} while (userRepository.existsByContractNumber(contractNumber));
+
+		return contractNumber;
+	}
+
 	public User getUser(UUID id) {
 		return userRepository.findById(id).orElse(null);
+	}
+
+	public List<User> getAllUsers() {
+		return userRepository.findAll();
 	}
 
 	public RegistrationCodes createRegistrationCode(UUID userId, String title, String description) {

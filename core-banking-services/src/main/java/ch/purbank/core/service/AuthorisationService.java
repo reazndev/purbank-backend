@@ -1,35 +1,59 @@
 package ch.purbank.core.service;
 
-import ch.purbank.core.domain.AuthorisationRequest;
-import ch.purbank.core.domain.User;
+import ch.purbank.core.domain.*;
 import ch.purbank.core.domain.enums.AuthorisationStatus;
-import ch.purbank.core.repository.AuthorisationRequestRepository;
+import ch.purbank.core.domain.enums.PendingPaymentStatus;
+import ch.purbank.core.repository.*;
 import ch.purbank.core.security.SecureTokenGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
+@Slf4j
 public class AuthorisationService {
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
 
     private final AuthorisationRequestRepository authorisationRequestRepository;
+    private final PendingPaymentRepository pendingPaymentRepository;
+    private final PendingPaymentUpdateRepository pendingPaymentUpdateRepository;
+    private final PendingPaymentDeleteRepository pendingPaymentDeleteRepository;
+    private final PendingKontoDeleteRepository pendingKontoDeleteRepository;
+    private final PendingMemberInviteRepository pendingMemberInviteRepository;
     private final MobileSecurityService mobileSecurityService;
     private final ActionExecutionService actionExecutionService;
+    private final ObjectMapper objectMapper;
 
     public AuthorisationService(AuthorisationRequestRepository authorisationRequestRepository,
-            MobileSecurityService mobileSecurityService,
-            ActionExecutionService actionExecutionService) {
+                                PendingPaymentRepository pendingPaymentRepository,
+                                PendingPaymentUpdateRepository pendingPaymentUpdateRepository,
+                                PendingPaymentDeleteRepository pendingPaymentDeleteRepository,
+                                PendingKontoDeleteRepository pendingKontoDeleteRepository,
+                                PendingMemberInviteRepository pendingMemberInviteRepository,
+                                MobileSecurityService mobileSecurityService,
+                                ActionExecutionService actionExecutionService,
+                                ObjectMapper objectMapper) {
         this.authorisationRequestRepository = authorisationRequestRepository;
+        this.pendingPaymentRepository = pendingPaymentRepository;
+        this.pendingPaymentUpdateRepository = pendingPaymentUpdateRepository;
+        this.pendingPaymentDeleteRepository = pendingPaymentDeleteRepository;
+        this.pendingKontoDeleteRepository = pendingKontoDeleteRepository;
+        this.pendingMemberInviteRepository = pendingMemberInviteRepository;
         this.mobileSecurityService = mobileSecurityService;
         this.actionExecutionService = actionExecutionService;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
     public String createAuthorisationRequest(User user, String deviceId, String ipAddress, String actionType,
-            String actionPayload) {
+                                             String actionPayload) {
 
         authorisationRequestRepository.findByUserAndStatus(user, AuthorisationStatus.PENDING)
                 .forEach(req -> {
@@ -60,6 +84,97 @@ public class AuthorisationService {
             return Optional.empty();
         }
 
+        // Check pending payment
+        Optional<PendingPayment> pendingPaymentOpt = pendingPaymentRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingPaymentOpt.isPresent()) {
+            PendingPayment pendingPayment = pendingPaymentOpt.get();
+
+            if (pendingPayment.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingPayment.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildPaymentActionPayload(pendingPayment));
+        }
+
+        // Check pending payment update
+        Optional<PendingPaymentUpdate> pendingUpdateOpt = pendingPaymentUpdateRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingUpdateOpt.isPresent()) {
+            PendingPaymentUpdate pendingUpdate = pendingUpdateOpt.get();
+
+            if (pendingUpdate.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingUpdate.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildPaymentUpdateActionPayload(pendingUpdate));
+        }
+
+        // Check pending payment delete
+        Optional<PendingPaymentDelete> pendingDeleteOpt = pendingPaymentDeleteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingDeleteOpt.isPresent()) {
+            PendingPaymentDelete pendingDelete = pendingDeleteOpt.get();
+
+            if (pendingDelete.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingDelete.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildPaymentDeleteActionPayload(pendingDelete));
+        }
+
+        // Check pending konto delete
+        Optional<PendingKontoDelete> pendingKontoDeleteOpt = pendingKontoDeleteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingKontoDeleteOpt.isPresent()) {
+            PendingKontoDelete pendingKontoDelete = pendingKontoDeleteOpt.get();
+
+            if (pendingKontoDelete.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingKontoDelete.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildKontoDeleteActionPayload(pendingKontoDelete));
+        }
+
+        // Check pending member invite
+        Optional<PendingMemberInvite> pendingInviteOpt = pendingMemberInviteRepository.findByMobileVerifyCodeAndStatus(
+                mobileVerifyCode, PendingPaymentStatus.PENDING);
+
+        if (pendingInviteOpt.isPresent()) {
+            PendingMemberInvite pendingInvite = pendingInviteOpt.get();
+
+            if (pendingInvite.isExpired()) {
+                return Optional.empty();
+            }
+
+            if (!mobileSecurityService.isValidSignature(pendingInvite.getUser(), signedMobileVerify)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(buildMemberInviteActionPayload(pendingInvite));
+        }
+
+        // Fall back to checking authorisation requests (for other action types)
         Optional<AuthorisationRequest> requestOpt = authorisationRequestRepository.findByMobileVerifyCodeAndStatus(
                 mobileVerifyCode, AuthorisationStatus.PENDING);
 
@@ -80,6 +195,99 @@ public class AuthorisationService {
         return Optional.of(request.getActionPayload());
     }
 
+    private String buildPaymentActionPayload(PendingPayment pendingPayment) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "PAYMENT");
+            payload.put("amount", pendingPayment.getAmount().toString());
+            payload.put("currency", pendingPayment.getPaymentCurrency().toString());
+            payload.put("to", pendingPayment.getToIban());
+            payload.put("message", pendingPayment.getMessage());
+            payload.put("note", pendingPayment.getNote());
+            payload.put("executionType", pendingPayment.getExecutionType().toString());
+            payload.put("executionDate", pendingPayment.getExecutionDate().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building payment action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildPaymentUpdateActionPayload(PendingPaymentUpdate pendingUpdate) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "PAYMENT_UPDATE");
+            payload.put("paymentId", pendingUpdate.getPaymentId().toString());
+
+            // Include only fields that are being updated (non-null)
+            if (pendingUpdate.getToIban() != null) {
+                payload.put("toIban", pendingUpdate.getToIban());
+            }
+            if (pendingUpdate.getAmount() != null) {
+                payload.put("amount", pendingUpdate.getAmount().toString());
+            }
+            if (pendingUpdate.getPaymentCurrency() != null) {
+                payload.put("currency", pendingUpdate.getPaymentCurrency().toString());
+            }
+            if (pendingUpdate.getMessage() != null) {
+                payload.put("message", pendingUpdate.getMessage());
+            }
+            if (pendingUpdate.getNote() != null) {
+                payload.put("note", pendingUpdate.getNote());
+            }
+            if (pendingUpdate.getExecutionDate() != null) {
+                payload.put("executionDate", pendingUpdate.getExecutionDate().toString());
+            }
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building payment update action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildPaymentDeleteActionPayload(PendingPaymentDelete pendingDelete) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "PAYMENT_DELETE");
+            payload.put("paymentId", pendingDelete.getPaymentId().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building payment delete action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildKontoDeleteActionPayload(PendingKontoDelete pendingKontoDelete) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "KONTO_DELETE");
+            payload.put("kontoId", pendingKontoDelete.getKontoId().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building konto delete action payload", e);
+            return "{}";
+        }
+    }
+
+    private String buildMemberInviteActionPayload(PendingMemberInvite pendingInvite) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "MEMBER_INVITE");
+            payload.put("kontoId", pendingInvite.getKontoId().toString());
+            payload.put("contractNumber", pendingInvite.getContractNumber());
+            payload.put("role", pendingInvite.getRole().toString());
+
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("Error building member invite action payload", e);
+            return "{}";
+        }
+    }
+
     @Transactional
     public boolean approveAuthorisation(String signedMobileVerify) {
         return handleMobileApproval(signedMobileVerify, "{APPROVE}", AuthorisationStatus.APPROVED);
@@ -90,14 +298,122 @@ public class AuthorisationService {
         return handleMobileApproval(signedMobileVerify, "{REJECT}", AuthorisationStatus.REJECTED);
     }
 
+    private boolean handlePendingApproval(Object pending, User user, String signedMobileVerify,
+                                          AuthorisationStatus newStatus, String actionType,
+                                          String mobileVerifyCode) {
+        // Check status and expiration
+        boolean isExpired = false;
+        PendingPaymentStatus status = null;
+
+        if (pending instanceof PendingPayment) {
+            PendingPayment p = (PendingPayment) pending;
+            status = p.getStatus();
+            isExpired = p.isExpired();
+        } else if (pending instanceof PendingPaymentUpdate) {
+            PendingPaymentUpdate p = (PendingPaymentUpdate) pending;
+            status = p.getStatus();
+            isExpired = p.isExpired();
+        } else if (pending instanceof PendingPaymentDelete) {
+            PendingPaymentDelete p = (PendingPaymentDelete) pending;
+            status = p.getStatus();
+            isExpired = p.isExpired();
+        } else if (pending instanceof PendingKontoDelete) {
+            PendingKontoDelete p = (PendingKontoDelete) pending;
+            status = p.getStatus();
+            isExpired = p.isExpired();
+        } else if (pending instanceof PendingMemberInvite) {
+            PendingMemberInvite p = (PendingMemberInvite) pending;
+            status = p.getStatus();
+            isExpired = p.isExpired();
+        }
+
+        if (status != PendingPaymentStatus.PENDING || isExpired) {
+            return false;
+        }
+
+        if (!mobileSecurityService.isValidSignature(user, signedMobileVerify)) {
+            return false;
+        }
+
+        if (newStatus == AuthorisationStatus.APPROVED) {
+            AuthorisationRequest tempRequest = AuthorisationRequest.builder()
+                    .mobileVerifyCode(mobileVerifyCode)
+                    .actionType(actionType)
+                    .build();
+
+            actionExecutionService.executeAction(tempRequest);
+        } else {
+            // Rejection - mark as rejected and save
+            if (pending instanceof PendingPayment) {
+                PendingPayment p = (PendingPayment) pending;
+                p.markCompleted(PendingPaymentStatus.REJECTED);
+                pendingPaymentRepository.save(p);
+            } else if (pending instanceof PendingPaymentUpdate) {
+                PendingPaymentUpdate p = (PendingPaymentUpdate) pending;
+                p.markCompleted(PendingPaymentStatus.REJECTED);
+                pendingPaymentUpdateRepository.save(p);
+            } else if (pending instanceof PendingPaymentDelete) {
+                PendingPaymentDelete p = (PendingPaymentDelete) pending;
+                p.markCompleted(PendingPaymentStatus.REJECTED);
+                pendingPaymentDeleteRepository.save(p);
+            } else if (pending instanceof PendingKontoDelete) {
+                PendingKontoDelete p = (PendingKontoDelete) pending;
+                p.markCompleted(PendingPaymentStatus.REJECTED);
+                pendingKontoDeleteRepository.save(p);
+            } else if (pending instanceof PendingMemberInvite) {
+                PendingMemberInvite p = (PendingMemberInvite) pending;
+                p.markCompleted(PendingPaymentStatus.REJECTED);
+                pendingMemberInviteRepository.save(p);
+            }
+        }
+
+        return true;
+    }
+
     private boolean handleMobileApproval(String signedMobileVerify, String requiredPrefix,
-            AuthorisationStatus newStatus) {
+                                         AuthorisationStatus newStatus) {
         String mobileVerifyCode = mobileSecurityService.extractMobileVerifyCode(signedMobileVerify);
 
         if (!signedMobileVerify.startsWith(requiredPrefix)) {
             return false;
         }
 
+        // Check pending payment
+        Optional<PendingPayment> pendingPaymentOpt = pendingPaymentRepository.findByMobileVerifyCode(mobileVerifyCode);
+        if (pendingPaymentOpt.isPresent()) {
+            return handlePendingApproval(pendingPaymentOpt.get(), pendingPaymentOpt.get().getUser(),
+                    signedMobileVerify, newStatus, "PAYMENT", mobileVerifyCode);
+        }
+
+        // Check pending payment update
+        Optional<PendingPaymentUpdate> pendingUpdateOpt = pendingPaymentUpdateRepository.findByMobileVerifyCode(mobileVerifyCode);
+        if (pendingUpdateOpt.isPresent()) {
+            return handlePendingApproval(pendingUpdateOpt.get(), pendingUpdateOpt.get().getUser(),
+                    signedMobileVerify, newStatus, "PAYMENT_UPDATE", mobileVerifyCode);
+        }
+
+        // Check pending payment delete
+        Optional<PendingPaymentDelete> pendingDeleteOpt = pendingPaymentDeleteRepository.findByMobileVerifyCode(mobileVerifyCode);
+        if (pendingDeleteOpt.isPresent()) {
+            return handlePendingApproval(pendingDeleteOpt.get(), pendingDeleteOpt.get().getUser(),
+                    signedMobileVerify, newStatus, "PAYMENT_DELETE", mobileVerifyCode);
+        }
+
+        // Check pending konto delete
+        Optional<PendingKontoDelete> pendingKontoDeleteOpt = pendingKontoDeleteRepository.findByMobileVerifyCode(mobileVerifyCode);
+        if (pendingKontoDeleteOpt.isPresent()) {
+            return handlePendingApproval(pendingKontoDeleteOpt.get(), pendingKontoDeleteOpt.get().getUser(),
+                    signedMobileVerify, newStatus, "KONTO_DELETE", mobileVerifyCode);
+        }
+
+        // Check pending member invite
+        Optional<PendingMemberInvite> pendingInviteOpt = pendingMemberInviteRepository.findByMobileVerifyCode(mobileVerifyCode);
+        if (pendingInviteOpt.isPresent()) {
+            return handlePendingApproval(pendingInviteOpt.get(), pendingInviteOpt.get().getUser(),
+                    signedMobileVerify, newStatus, "MEMBER_INVITE", mobileVerifyCode);
+        }
+
+        // Fall back to checking authorisation requests (for other action types)
         Optional<AuthorisationRequest> requestOpt = authorisationRequestRepository
                 .findByMobileVerifyCode(mobileVerifyCode);
 
