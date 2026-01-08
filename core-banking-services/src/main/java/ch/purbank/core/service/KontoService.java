@@ -94,6 +94,7 @@ public class KontoService {
                         m.getKonto().getName(),
                         m.getKonto().getBalance(),
                         m.getRole(),
+                        m.getKonto().getZinssatz(),
                         m.getKonto().getIban(),
                         m.getKonto().getCurrency()))
                 .collect(Collectors.toList());
@@ -440,6 +441,34 @@ public class KontoService {
     // ===== ADMIN METHODS =====
 
     @Transactional(readOnly = true)
+    public List<AdminKontoListItemDTO> getAllKontenForUserAdmin(UUID userId, Boolean includeClosed) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        List<KontoMember> memberships = kontoMemberRepository.findByUser(user);
+
+        return memberships.stream()
+                .filter(m -> {
+                    if (includeClosed == null || !includeClosed) {
+                        return m.getKonto().getStatus() == KontoStatus.ACTIVE;
+                    } else {
+                        return m.getKonto().getStatus() == KontoStatus.CLOSED;
+                    }
+                })
+                .map(m -> new AdminKontoListItemDTO(
+                        m.getKonto().getId(),
+                        m.getKonto().getName(),
+                        m.getKonto().getBalance(),
+                        m.getRole(),
+                        m.getKonto().getZinssatz(),
+                        m.getKonto().getIban(),
+                        m.getKonto().getCurrency(),
+                        m.getKonto().getAccruedInterest(),
+                        m.getKonto().getLastInterestCalcDate()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public KontoDetailDTO getKontoDetailAdmin(UUID kontoId) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
@@ -464,6 +493,33 @@ public class KontoService {
                 konto.getClosedAt());
     }
 
+    @Transactional(readOnly = true)
+    public AdminKontoDetailDTO getKontoDetailAdminExtended(UUID kontoId) {
+        Konto konto = kontoRepository.findById(kontoId)
+                .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
+
+        // Get first member for role display (admin doesn't have a specific role)
+        KontoMember firstMember = kontoMemberRepository.findByKonto(konto).stream()
+                .findFirst()
+                .orElse(null);
+
+        MemberRole displayRole = firstMember != null ? firstMember.getRole() : MemberRole.VIEWER;
+
+        return new AdminKontoDetailDTO(
+                konto.getId(),
+                konto.getName(),
+                konto.getBalance(),
+                displayRole,
+                konto.getZinssatz(),
+                konto.getIban(),
+                konto.getCurrency(),
+                konto.getStatus(),
+                konto.getCreatedAt(),
+                konto.getClosedAt(),
+                konto.getAccruedInterest(),
+                konto.getLastInterestCalcDate());
+    }
+
     @Transactional
     public void updateKontoAdmin(UUID kontoId, UpdateKontoRequestDTO request, BigDecimal balanceAdjustment) {
         Konto konto = kontoRepository.findById(kontoId)
@@ -471,6 +527,11 @@ public class KontoService {
 
         if (request.getName() != null && !request.getName().isBlank()) {
             konto.setName(request.getName());
+        }
+
+        if (request.getZinssatz() != null) {
+            konto.setZinssatz(request.getZinssatz());
+            log.info("Admin updated konto {} zinssatz to {}", kontoId, request.getZinssatz());
         }
 
         if (balanceAdjustment != null && balanceAdjustment.compareTo(BigDecimal.ZERO) != 0) {

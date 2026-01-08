@@ -6,11 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
 @AllArgsConstructor
-public class KontoListItemDTO {
+public class AdminKontoListItemDTO {
     private UUID kontoId;
     private String kontoName;
     private BigDecimal balance;
@@ -18,4 +19,6 @@ public class KontoListItemDTO {
     private BigDecimal zinssatz;
     private String iban;
     private Currency currency;
+    private BigDecimal accruedInterest;
+    private LocalDate lastInterestCalcDate;
 }

@@ -2,6 +2,7 @@ package ch.purbank.core.controller;
 
 import ch.purbank.core.domain.Konto;
 import ch.purbank.core.dto.*;
+import ch.purbank.core.service.InterestService;
 import ch.purbank.core.service.KontoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,25 +25,26 @@ import java.util.UUID;
 public class AdminKontoController {
 
     private final KontoService kontoService;
+    private final InterestService interestService;
 
     @GetMapping("/user/{userId}")
-    @Operation(summary = "Get konten for user", description = "Admin: Gets all konten for a specific user")
-    public ResponseEntity<List<KontoListItemDTO>> getKontenForUser(
+    @Operation(summary = "Get konten for user", description = "Admin: Gets all konten for a specific user with accrued interest data")
+    public ResponseEntity<List<AdminKontoListItemDTO>> getKontenForUser(
             @Parameter(description = "User UUID", required = true) @PathVariable UUID userId,
             @Parameter(description = "Include closed konten (true=only closed, false/null=only open)", required = false)
             @RequestParam(required = false) Boolean includeClosed) {
 
-        List<KontoListItemDTO> konten = kontoService.getAllKontenForUser(userId, includeClosed);
+        List<AdminKontoListItemDTO> konten = kontoService.getAllKontenForUserAdmin(userId, includeClosed);
         return ResponseEntity.ok(konten);
     }
 
     @GetMapping("/{kontoId}")
-    @Operation(summary = "Get konto details", description = "Admin: Gets detailed information about any konto")
-    public ResponseEntity<KontoDetailDTO> getKontoDetail(
+    @Operation(summary = "Get konto details", description = "Admin: Gets detailed information about any konto with accrued interest data")
+    public ResponseEntity<AdminKontoDetailDTO> getKontoDetail(
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
             @Parameter(description = "User UUID (for authorization context)", required = true) @RequestParam UUID userId) {
 
-        KontoDetailDTO detail = kontoService.getKontoDetailAdmin(kontoId);
+        AdminKontoDetailDTO detail = kontoService.getKontoDetailAdminExtended(kontoId);
         return ResponseEntity.ok(detail);
     }
 
@@ -57,10 +59,10 @@ public class AdminKontoController {
     }
 
     @PatchMapping("/{kontoId}")
-    @Operation(summary = "Update konto", description = "Admin: Updates konto details (name, balance)")
+    @Operation(summary = "Update konto", description = "Admin: Updates konto details (name, zinssatz, balance)")
     public ResponseEntity<GenericStatusResponse> updateKonto(
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
-            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdateKontoRequestDTO request,
+            @Parameter(description = "Update details (name, zinssatz)", required = true) @Valid @RequestBody UpdateKontoRequestDTO request,
             @Parameter(description = "Balance adjustment (optional)", required = false) @RequestParam(required = false) BigDecimal balanceAdjustment) {
 
         kontoService.updateKontoAdmin(kontoId, request, balanceAdjustment);
@@ -83,5 +85,13 @@ public class AdminKontoController {
 
         List<MemberDTO> members = kontoService.getMembersAdmin(kontoId);
         return ResponseEntity.ok(members);
+    }
+
+    @PostMapping("/abrechnung")
+    @Operation(summary = "Process manual Abrechnung", description = "Admin: Manually trigger quarterly interest settlement (Abrechnung) without today's daily calculation")
+    public ResponseEntity<GenericStatusResponse> processManualAbrechnung() {
+        log.info("Admin triggered manual Abrechnung");
+        interestService.processManualAbrechnung();
+        return ResponseEntity.ok(new GenericStatusResponse("Manual Abrechnung completed successfully"));
     }
 }
