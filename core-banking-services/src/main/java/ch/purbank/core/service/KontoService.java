@@ -229,7 +229,7 @@ public class KontoService {
     @Transactional
     public void updateKonto(UUID kontoId, UUID userId, UpdateKontoRequestDTO request) {
         
-        validateKontoName(name);
+        validateKontoName(request.getName());
         
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
