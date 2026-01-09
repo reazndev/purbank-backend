@@ -87,7 +87,7 @@ public class KontoService {
         return konto;
     }
 
-    public void validateKontoName(String name) {
+    private void validateKontoName(String name) {
                 if (name == null) {
                         throw new IllegalArgumentException("Konto name cannot be null");
                 }
