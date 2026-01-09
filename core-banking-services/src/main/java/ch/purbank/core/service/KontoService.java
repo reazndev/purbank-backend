@@ -44,6 +44,8 @@ public class KontoService {
     public Konto createKonto(String name, UUID userId, Currency currency) {
         log.info("Creating konto '{}' for user {} with currency {}", name, userId, currency);
 
+        validateKontoName(name);
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -84,6 +86,18 @@ public class KontoService {
 
         return konto;
     }
+
+    public void validateKontoName(String name) {
+                if (name == null) {
+                        throw new IllegalArgumentException("Konto name cannot be null");
+                }
+                if (name.isBlank()) {
+                        throw new IllegalArgumentException("Konto name cannot be empty");
+                }
+                if (name.length() > 100) {
+                        throw new IllegalArgumentException("Konto name too long");
+                }
+        }
 
     @Transactional(readOnly = true)
     public List<KontoListItemDTO> getAllKontenForUser(UUID userId, Boolean includeClosed) {
@@ -214,6 +228,9 @@ public class KontoService {
 
     @Transactional
     public void updateKonto(UUID kontoId, UUID userId, UpdateKontoRequestDTO request) {
+        
+        validateKontoName(name);
+        
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
