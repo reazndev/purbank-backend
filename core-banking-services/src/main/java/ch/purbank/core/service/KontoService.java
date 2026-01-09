@@ -249,8 +249,9 @@ public class KontoService {
             throw new IllegalArgumentException("Update request must not be null");
         }
 
+        validateKontoName(request.getName());
+
         if (request.getName() != null) {
-            validateKontoName(request.getName());
             konto.setName(request.getName());
         }
 
@@ -628,8 +629,9 @@ public class KontoService {
             throw new IllegalArgumentException("Update request must not be null");
         }
 
+        validateKontoName(request.getName());
+
         if (request.getName() != null) {
-            validateKontoName(request.getName());
             auditDetails.append("name changed to '").append(request.getName()).append("'; ");
             konto.setName(request.getName());
         }
