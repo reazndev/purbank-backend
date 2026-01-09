@@ -23,6 +23,7 @@ import ch.purbank.core.domain.AuthorisationRequest;
 import ch.purbank.core.domain.enums.AuthorisationStatus;
 import ch.purbank.core.repository.AuthorisationRequestRepository;
 import ch.purbank.core.security.SecureTokenGenerator;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,8 +73,10 @@ public class AuthenticationService {
     }
 
     @Transactional
-    public AuthenticationResponseDTO authenticate(AuthenticationRequestDTO request) {
+    public AuthenticationResponseDTO authenticate(AuthenticationRequestDTO request, HttpServletRequest httpRequest) {
         User user = null;
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
+
         try {
             user = repository.findByEmail(request.getEmail())
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -98,7 +101,7 @@ public class AuthenticationService {
                     AuditEntityType.USER,
                     user.getId(),
                     user,
-                    null,
+                    ipAddress,
                     "Password-based login successful"
             );
 
@@ -112,7 +115,7 @@ public class AuthenticationService {
                     AuditEntityType.USER,
                     user != null ? user.getId() : null,
                     user,
-                    null,
+                    ipAddress,
                     "Login attempt with email: " + request.getEmail(),
                     e.getMessage()
             );
@@ -352,7 +355,7 @@ public class AuthenticationService {
                 .build();
     }
 
-    public AuthenticationResponseDTO refreshToken(String authHeader) {
+    public AuthenticationResponseDTO refreshToken(String authHeader, HttpServletRequest httpRequest) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new IllegalArgumentException("Invalid Token format");
         }
@@ -381,12 +384,13 @@ public class AuthenticationService {
         tokenRepository.save(refreshToken);
 
         // Audit log token refresh
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.TOKEN_REFRESHED,
                 AuditEntityType.USER,
                 user.getId(),
                 user,
-                null,
+                ipAddress,
                 "Access token refreshed successfully"
         );
 
@@ -396,7 +400,7 @@ public class AuthenticationService {
                 .build();
     }
 
-    public void changePassword(ChangePasswordRequestDTO request, Principal connectedUser) {
+    public void changePassword(ChangePasswordRequestDTO request, Principal connectedUser, HttpServletRequest httpRequest) {
         var user = (User) ((UsernamePasswordAuthenticationToken) connectedUser).getPrincipal();
 
         if (!user.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
@@ -418,12 +422,13 @@ public class AuthenticationService {
         repository.save(user);
 
         // Audit log password change
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.PASSWORD_CHANGED,
                 AuditEntityType.USER,
                 user.getId(),
                 user,
-                null,
+                ipAddress,
                 "Admin password changed successfully"
         );
     }
