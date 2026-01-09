@@ -52,9 +52,10 @@ public class AdminKontoController {
     @Operation(summary = "Create konto for user", description = "Admin: Creates a new konto for a specific user")
     public ResponseEntity<Konto> createKontoForUser(
             @Parameter(description = "User UUID", required = true) @PathVariable UUID userId,
-            @Parameter(description = "Konto creation details", required = true) @Valid @RequestBody CreateKontoRequestDTO request) {
+            @Parameter(description = "Konto creation details", required = true) @Valid @RequestBody CreateKontoRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        Konto konto = kontoService.createKonto(request.getName(), userId, request.getCurrency());
+        Konto konto = kontoService.createKonto(request.getName(), userId, request.getCurrency(), httpRequest);
         return ResponseEntity.ok(konto);
     }
 

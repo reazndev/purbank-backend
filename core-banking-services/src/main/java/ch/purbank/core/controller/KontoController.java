@@ -30,9 +30,10 @@ public class KontoController {
     @Operation(summary = "Create new konto", description = "Creates a new konto for the authenticated user")
     public ResponseEntity<Konto> createKonto(
             @AuthenticationPrincipal User currentUser,
-            @Parameter(description = "Konto creation details", required = true) @Valid @RequestBody CreateKontoRequestDTO request) {
+            @Parameter(description = "Konto creation details", required = true) @Valid @RequestBody CreateKontoRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        Konto konto = kontoService.createKonto(request.getName(), currentUser.getId(), request.getCurrency());
+        Konto konto = kontoService.createKonto(request.getName(), currentUser.getId(), request.getCurrency(), httpRequest);
         return ResponseEntity.ok(konto);
     }
 
@@ -86,9 +87,10 @@ public class KontoController {
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
             @Parameter(description = "Transaction UUID", required = true) @PathVariable UUID transactionId,
-            @Parameter(description = "Note update", required = true) @Valid @RequestBody UpdateTransactionNoteDTO request) {
+            @Parameter(description = "Note update", required = true) @Valid @RequestBody UpdateTransactionNoteDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        kontoService.updateTransactionNote(kontoId, transactionId, currentUser.getId(), request.getNote());
+        kontoService.updateTransactionNote(kontoId, transactionId, currentUser.getId(), request.getNote(), httpRequest);
         return ResponseEntity.ok(new GenericStatusResponse("OK"));
     }
 
@@ -97,9 +99,10 @@ public class KontoController {
     public ResponseEntity<GenericStatusResponse> updateKonto(
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
-            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdateKontoRequestDTO request) {
+            @Parameter(description = "Update details", required = true) @Valid @RequestBody UpdateKontoRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        kontoService.updateKonto(kontoId, currentUser.getId(), request);
+        kontoService.updateKonto(kontoId, currentUser.getId(), request, httpRequest);
         return ResponseEntity.ok(new GenericStatusResponse("OK"));
     }
 
@@ -158,9 +161,10 @@ public class KontoController {
     public ResponseEntity<GenericStatusResponse> removeMember(
             @AuthenticationPrincipal User currentUser,
             @Parameter(description = "Konto UUID", required = true) @PathVariable UUID kontoId,
-            @Parameter(description = "Member UUID", required = true) @PathVariable UUID memberId) {
+            @Parameter(description = "Member UUID", required = true) @PathVariable UUID memberId,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
 
-        kontoService.removeMember(kontoId, currentUser.getId(), memberId);
+        kontoService.removeMember(kontoId, currentUser.getId(), memberId, httpRequest);
         return ResponseEntity.ok(new GenericStatusResponse("OK"));
     }
 

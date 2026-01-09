@@ -36,8 +36,9 @@ public class AuthController {
     @PostMapping("/login/password")
     @Operation(summary = "Admin/User Login (Email/Password)", description = "Authenticates user/admin with email and password (Legacy flow).")
     public ResponseEntity<AuthenticationResponseDTO> authenticatePassword(
-            @RequestBody AuthenticationRequestDTO request) {
-        return ResponseEntity.ok(service.authenticate(request));
+            @RequestBody AuthenticationRequestDTO request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(service.authenticate(request, httpRequest));
     }
 
     @PostMapping("/login")
@@ -68,16 +69,18 @@ public class AuthController {
     @PostMapping("/refresh-token")
     @Operation(summary = "Refresh Token (Legacy/Bearer Token)", description = "Get new Access Token using the Stateful Refresh Token from the Authorization Header.")
     public ResponseEntity<AuthenticationResponseDTO> refreshToken(
-            @RequestHeader("Authorization") String authHeader) {
-        return ResponseEntity.ok(service.refreshToken(authHeader));
+            @RequestHeader("Authorization") String authHeader,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(service.refreshToken(authHeader, httpRequest));
     }
 
     @PatchMapping("/change-password")
     @Operation(summary = "Change Password (Admin Only)", description = "Authenticated Admin changes their own password.")
     public ResponseEntity<?> changePassword(
             @RequestBody ChangePasswordRequestDTO request,
-            Principal connectedUser) {
-        service.changePassword(request, connectedUser);
+            Principal connectedUser,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        service.changePassword(request, connectedUser, httpRequest);
         return ResponseEntity.ok().build();
     }
 
