@@ -159,4 +159,51 @@ public class InterestService {
         log.info("Starting manual interest Abrechnung (without today's daily calculation)");
         processQuarterlyAbrechnung();
     }
+
+    /**
+     * Forces daily interest calculation for all active konten, ignoring lastInterestCalcDate.
+     * This is mainly used for dev and testing, though might be useful someday.
+     */
+    @Transactional
+    public void processManualDailyCalculation() {
+        LocalDate today = LocalDate.now();
+        log.info("Starting manual daily interest calculation for {} (ignoring last calculation date)", today);
+
+        List<Konto> activeKonten = kontoRepository.findAll().stream()
+                .filter(k -> k.getStatus() == KontoStatus.ACTIVE)
+                .toList();
+
+        int processedCount = 0;
+        for (Konto konto : activeKonten) {
+            BigDecimal balance = konto.getBalance();
+            BigDecimal annualRate = konto.getZinssatz();
+
+            // Calculate daily interest: balance × (annual_rate / 365)
+            BigDecimal dailyInterest = balance
+                    .multiply(annualRate)
+                    .divide(BigDecimal.valueOf(365), 8, RoundingMode.HALF_UP);
+
+            // Add to accrued interest
+            konto.setAccruedInterest(konto.getAccruedInterest().add(dailyInterest));
+            konto.setLastInterestCalcDate(today);
+
+            kontoRepository.save(konto);
+            processedCount++;
+
+            log.debug("Konto {}: balance={}, rate={}, daily_interest={}, accrued_total={}",
+                    konto.getId(), balance, annualRate, dailyInterest, konto.getAccruedInterest());
+        }
+
+        log.info("Manual daily interest calculation completed. Processed {} konten", processedCount);
+
+        // Audit log manual daily interest calculation
+        if (processedCount > 0) {
+            auditLogService.logSystem(
+                    AuditAction.INTEREST_CALCULATED,
+                    AuditEntityType.SYSTEM,
+                    null,
+                    String.format("Manual daily interest calculated for %d konten on %s (ignoring last calc date)", processedCount, today)
+            );
+        }
+    }
 }
