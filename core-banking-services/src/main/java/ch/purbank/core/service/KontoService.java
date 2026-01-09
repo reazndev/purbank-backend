@@ -228,9 +228,14 @@ public class KontoService {
 
     @Transactional
     public void updateKonto(UUID kontoId, UUID userId, UpdateKontoRequestDTO request) {
-        
-        validateKontoName(request.getName());
-        
+
+        if (request == null) {
+            throw new IllegalArgumentException("Update request must not be null");
+        }
+
+        if (request.getName() != null) {
+            validateKontoName(request.getName());
+        }
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
