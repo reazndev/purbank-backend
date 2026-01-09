@@ -39,10 +39,13 @@ public class KontoService {
     private final AuditLogService auditLogService;
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
+    private static final int MAX_KONTO_NAME_LENGTH = 100;
 
     @Transactional
     public Konto createKonto(String name, UUID userId, Currency currency, jakarta.servlet.http.HttpServletRequest httpRequest) {
         log.info("Creating konto '{}' for user {} with currency {}", name, userId, currency);
+
+        validateKontoName(name);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -85,6 +88,18 @@ public class KontoService {
 
         return konto;
     }
+
+    private void validateKontoName(String name) {
+                if (name == null) {
+                        throw new IllegalArgumentException("Konto name cannot be null");
+                }
+                if (name.isBlank()) {
+                        throw new IllegalArgumentException("Konto name cannot be empty");
+                }
+                if (name.length() > MAX_KONTO_NAME_LENGTH) {
+                        throw new IllegalArgumentException("Konto name too long");
+                }
+        }
 
     @Transactional(readOnly = true)
     public List<KontoListItemDTO> getAllKontenForUser(UUID userId, Boolean includeClosed) {
@@ -230,7 +245,13 @@ public class KontoService {
             throw new IllegalArgumentException("Only owners can update konto details");
         }
 
-        if (request.getName() != null && !request.getName().isBlank()) {
+        if (request == null) {
+            throw new IllegalArgumentException("Update request must not be null");
+        }
+
+        validateKontoName(request.getName());
+
+        if (request.getName() != null) {
             konto.setName(request.getName());
         }
 
@@ -604,7 +625,13 @@ public class KontoService {
 
         StringBuilder auditDetails = new StringBuilder();
 
-        if (request.getName() != null && !request.getName().isBlank()) {
+        if (request == null) {
+            throw new IllegalArgumentException("Update request must not be null");
+        }
+
+        validateKontoName(request.getName());
+
+        if (request.getName() != null) {
             auditDetails.append("name changed to '").append(request.getName()).append("'; ");
             konto.setName(request.getName());
         }
