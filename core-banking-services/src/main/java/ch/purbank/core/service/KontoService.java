@@ -39,6 +39,7 @@ public class KontoService {
     private final AuditLogService auditLogService;
 
     private static final int MOBILE_VERIFY_TOKEN_LENGTH = 64;
+    private static final int MAX_KONTO_NAME_LENGTH = 100;
 
     @Transactional
     public Konto createKonto(String name, UUID userId, Currency currency) {
@@ -94,7 +95,7 @@ public class KontoService {
                 if (name.isBlank()) {
                         throw new IllegalArgumentException("Konto name cannot be empty");
                 }
-                if (name.length() > 100) {
+                if (name.length() > MAX_KONTO_NAME_LENGTH) {
                         throw new IllegalArgumentException("Konto name too long");
                 }
         }
@@ -250,7 +251,11 @@ public class KontoService {
             throw new IllegalArgumentException("Only owners can update konto details");
         }
 
-        if (request.getName() != null && !request.getName().isBlank()) {
+        if (request == null) {
+            throw new IllegalArgumentException("Update request must not be null");
+        }
+
+        if (request.getName() != null) {
             validateKontoName(request.getName());
             konto.setName(request.getName());
         }
@@ -623,7 +628,11 @@ public class KontoService {
 
         StringBuilder auditDetails = new StringBuilder();
 
-        if (request.getName() != null && !request.getName().isBlank()) {
+        if (request == null) {
+            throw new IllegalArgumentException("Update request must not be null");
+        }
+
+        if (request.getName() != null) {
             validateKontoName(request.getName());
             auditDetails.append("name changed to '").append(request.getName()).append("'; ");
             konto.setName(request.getName());
