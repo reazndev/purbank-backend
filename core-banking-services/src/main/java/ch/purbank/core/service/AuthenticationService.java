@@ -145,7 +145,7 @@ public class AuthenticationService {
                     .deviceId(request.getDeviceId())
                     .actionType("LOGIN")
                     .ipAddress(ipAddress)
-                    .actionPayload("{\"ip-address\": \"" + ipAddress + "\", \"ip-location\": \"Pending geolocation\"}")
+                    .actionPayload("{\"ip-address\": \"" + ipAddress + "\"}")
                     .status(AuthorisationStatus.PENDING)
                     .build();
 

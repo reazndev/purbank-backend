@@ -94,4 +94,12 @@ public class AdminKontoController {
         interestService.processManualAbrechnung();
         return ResponseEntity.ok(new GenericStatusResponse("Manual Abrechnung completed successfully"));
     }
+
+    @PostMapping("/daily-calculation")
+    @Operation(summary = "Force daily interest calculation", description = "Admin: Manually trigger daily interest calculation for all konten (ignoring last calculation date)")
+    public ResponseEntity<GenericStatusResponse> processManualDailyCalculation() {
+        log.info("Admin triggered manual daily interest calculation");
+        interestService.processManualDailyCalculation();
+        return ResponseEntity.ok(new GenericStatusResponse("Manual daily calculation completed successfully"));
+    }
 }

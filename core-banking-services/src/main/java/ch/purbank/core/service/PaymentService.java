@@ -106,10 +106,21 @@ public class PaymentService {
                 request.getPaymentCurrency() : Currency.CHF);
         payment.setMessage(request.getMessage());
         payment.setNote(request.getNote());
-        payment.setExecutionType(request.getExecutionType());
 
-        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
-            payment.setExecutionDate(LocalDate.now());
+        // Check if target IBAN is valid for INSTANT payments
+        PaymentExecutionType executionType = request.getExecutionType();
+        LocalDate executionDate;
+
+        if (executionType == PaymentExecutionType.INSTANT) {
+            Optional<Konto> targetKonto = kontoRepository.findByIban(request.getToIban());
+            if (targetKonto.isEmpty()) {
+                // Convert instant payment to normal payment for next day if target IBAN is invalid
+                log.warn("Target IBAN {} not found for instant payment. Converting to normal payment for next day.", request.getToIban());
+                executionType = PaymentExecutionType.NORMAL;
+                executionDate = LocalDate.now().plusDays(1);
+            } else {
+                executionDate = LocalDate.now();
+            }
         } else {
             if (request.getExecutionDate() == null) {
                 throw new IllegalArgumentException("Execution date required for normal payments");
@@ -117,17 +128,21 @@ public class PaymentService {
             if (request.getExecutionDate().isBefore(LocalDate.now())) {
                 throw new IllegalArgumentException("Execution date cannot be in the past");
             }
-            payment.setExecutionDate(request.getExecutionDate());
+            executionDate = request.getExecutionDate();
         }
+
+        payment.setExecutionType(executionType);
+        payment.setExecutionDate(executionDate);
 
         payment = paymentRepository.save(payment);
 
         // If INSTANT, execute immediately
-        if (request.getExecutionType() == PaymentExecutionType.INSTANT) {
+        if (executionType == PaymentExecutionType.INSTANT) {
             executePayment(payment);
         }
 
-        log.info("Payment created: {} for konto {}", payment.getId(), konto.getId());
+        log.info("Payment created: {} for konto {} (type: {}, execution date: {})",
+                payment.getId(), konto.getId(), executionType, executionDate);
         return payment;
     }
 
@@ -293,7 +308,16 @@ public class PaymentService {
             log.info("Executing payment {} - Amount: {} {}, Source Konto Currency: {}",
                     payment.getId(), paymentAmount, paymentCurrency, sourceKontoCurrency);
 
-            // Step 3: Convert payment to source konto currency
+            // Step 3: Validate target IBAN exists BEFORE deducting money
+            Optional<Konto> targetKontoOpt = kontoRepository.findByIban(payment.getToIban());
+            if (targetKontoOpt.isEmpty()) {
+                payment.fail();
+                paymentRepository.save(payment);
+                log.warn("Payment {} failed: target IBAN not found: {}", payment.getId(), payment.getToIban());
+                return;
+            }
+
+            // Step 4: Convert payment to source konto currency
             BigDecimal kontoAmountToDeduct;
             if (!paymentCurrency.equals(sourceKontoCurrency)) {
                 kontoAmountToDeduct = currencyConversionService.convert(
@@ -304,7 +328,7 @@ public class PaymentService {
                 kontoAmountToDeduct = paymentAmount;
             }
 
-            // Step 4: Check if sufficient balance
+            // Step 5: Check if sufficient balance
             if (sourceKonto.getBalance().compareTo(kontoAmountToDeduct) < 0) {
                 payment.fail();
                 paymentRepository.save(payment);
@@ -314,11 +338,11 @@ public class PaymentService {
                 return;
             }
 
-            // Step 5: Deduct from source konto
+            // Step 6: Deduct from source konto
             sourceKonto.subtractFromBalance(kontoAmountToDeduct);
             kontoRepository.save(sourceKonto);
 
-            // Step 6: Create outgoing transaction (preserve message and note from payment)
+            // Step 7: Create outgoing transaction (preserve message and note from payment)
             kontoService.createTransaction(
                     sourceKonto.getId(),
                     payment.getToIban(),
@@ -328,16 +352,8 @@ public class PaymentService {
                     TransactionType.OUTGOING,
                     sourceKontoCurrency);
 
-            // Step 7: Find target konto by IBAN
-            Optional<Konto> targetKontoOpt = kontoRepository.findByIban(payment.getToIban());
-            if (targetKontoOpt.isEmpty()) {
-                payment.fail();
-                paymentRepository.save(payment);
-                log.warn("Payment {} failed: target IBAN not found: {}", payment.getId(), payment.getToIban());
-                return;
-            }
+            // Step 8: Get target konto (already validated above)
 
-            // Step 8: Get target konto
             Konto targetKonto = targetKontoOpt.get();
             Currency targetKontoCurrency = targetKonto.getCurrency();
 
@@ -554,6 +570,20 @@ public class PaymentService {
             }
         }
 
+        // Check if target IBAN is valid for INSTANT payments
+        PaymentExecutionType executionType = pendingPayment.getExecutionType();
+        LocalDate executionDate = pendingPayment.getExecutionDate();
+
+        if (executionType == PaymentExecutionType.INSTANT) {
+            Optional<Konto> targetKonto = kontoRepository.findByIban(pendingPayment.getToIban());
+            if (targetKonto.isEmpty()) {
+                // Convert instant payment to normal payment for next day if target IBAN is invalid
+                log.warn("Target IBAN {} not found for instant payment. Converting to normal payment for next day.", pendingPayment.getToIban());
+                executionType = PaymentExecutionType.NORMAL;
+                executionDate = LocalDate.now().plusDays(1);
+            }
+        }
+
         // Create actual payment
         Payment payment = new Payment();
         payment.setKonto(konto);
@@ -562,20 +592,21 @@ public class PaymentService {
         payment.setPaymentCurrency(pendingPayment.getPaymentCurrency());
         payment.setMessage(pendingPayment.getMessage());
         payment.setNote(pendingPayment.getNote());
-        payment.setExecutionType(pendingPayment.getExecutionType());
-        payment.setExecutionDate(pendingPayment.getExecutionDate());
+        payment.setExecutionType(executionType);
+        payment.setExecutionDate(executionDate);
 
         payment = paymentRepository.save(payment);
 
         // If INSTANT, execute immediately
-        if (pendingPayment.getExecutionType() == PaymentExecutionType.INSTANT) {
+        if (executionType == PaymentExecutionType.INSTANT) {
             executePayment(payment);
         }
 
         pendingPayment.markCompleted(PendingPaymentStatus.APPROVED);
         pendingPaymentRepository.save(pendingPayment);
 
-        log.info("Payment {} created and approved from pending payment {}", payment.getId(), pendingPayment.getId());
+        log.info("Payment {} created and approved from pending payment {} (type: {}, execution date: {})",
+                payment.getId(), pendingPayment.getId(), executionType, executionDate);
 
         // Audit log payment approval and creation
         auditLogService.logSuccess(
@@ -587,7 +618,7 @@ public class PaymentService {
                 String.format("Payment of %s %s to %s approved and %s",
                         pendingPayment.getAmount(), pendingPayment.getPaymentCurrency(),
                         pendingPayment.getToIban(),
-                        pendingPayment.getExecutionType() == PaymentExecutionType.INSTANT ? "executed immediately" : "scheduled for " + pendingPayment.getExecutionDate())
+                        executionType == PaymentExecutionType.INSTANT ? "executed immediately" : "scheduled for " + executionDate)
         );
 
         return payment;
