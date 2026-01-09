@@ -30,7 +30,10 @@ public class OpenApiConfig {
                 .servers(List.of(
                         new Server()
                                 .url("http://localhost:8080")
-                                .description("Development Server")))
+                                .description("Development Server"),
+                        new Server()
+                                .url("https://ebanking.purbank.ch")
+                                .description("Prod Server")))
                 .addSecurityItem(new SecurityRequirement()
                         .addList(securitySchemeName))
                 .components(new Components()

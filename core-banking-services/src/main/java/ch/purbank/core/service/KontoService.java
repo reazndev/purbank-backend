@@ -42,7 +42,7 @@ public class KontoService {
     private static final int MAX_KONTO_NAME_LENGTH = 100;
 
     @Transactional
-    public Konto createKonto(String name, UUID userId, Currency currency) {
+    public Konto createKonto(String name, UUID userId, Currency currency, jakarta.servlet.http.HttpServletRequest httpRequest) {
         log.info("Creating konto '{}' for user {} with currency {}", name, userId, currency);
 
         validateKontoName(name);
@@ -76,12 +76,13 @@ public class KontoService {
 
         log.info("Konto created with ID: {}", konto.getId());
 
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.KONTO_CREATED,
                 AuditEntityType.KONTO,
                 konto.getId(),
                 user,
-                null,
+                ipAddress,
                 String.format("Konto '%s' created with IBAN %s, currency %s", name, konto.getIban(), currency)
         );
 
@@ -191,7 +192,7 @@ public class KontoService {
     }
 
     @Transactional
-    public void updateTransactionNote(UUID kontoId, UUID transactionId, UUID userId, String note) {
+    public void updateTransactionNote(UUID kontoId, UUID transactionId, UUID userId, String note, jakarta.servlet.http.HttpServletRequest httpRequest) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -217,26 +218,19 @@ public class KontoService {
         transactionRepository.save(transaction);
 
         // Audit log transaction note update
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.TRANSACTION_UPDATED,
                 AuditEntityType.TRANSACTION,
                 transactionId,
                 user,
-                null,
+                ipAddress,
                 String.format("Transaction note updated on konto %s", konto.getIban())
         );
     }
 
     @Transactional
-    public void updateKonto(UUID kontoId, UUID userId, UpdateKontoRequestDTO request) {
-
-        if (request == null) {
-            throw new IllegalArgumentException("Update request must not be null");
-        }
-
-        if (request.getName() != null) {
-            validateKontoName(request.getName());
-        }
+    public void updateKonto(UUID kontoId, UUID userId, UpdateKontoRequestDTO request, jakarta.servlet.http.HttpServletRequest httpRequest) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -263,12 +257,13 @@ public class KontoService {
         kontoRepository.save(konto);
 
         // Audit log konto update
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.KONTO_UPDATED,
                 AuditEntityType.KONTO,
                 kontoId,
                 user,
-                null,
+                ipAddress,
                 String.format("Konto details updated: %s", request.getName() != null ? "name changed to '" + request.getName() + "'" : "")
         );
     }
@@ -435,7 +430,7 @@ public class KontoService {
     }
 
     @Transactional
-    public void removeMember(UUID kontoId, UUID userId, UUID memberId) {
+    public void removeMember(UUID kontoId, UUID userId, UUID memberId, jakarta.servlet.http.HttpServletRequest httpRequest) {
         Konto konto = kontoRepository.findById(kontoId)
                 .orElseThrow(() -> new IllegalArgumentException("Konto not found"));
 
@@ -472,12 +467,13 @@ public class KontoService {
         log.info("Member {} removed from konto {}", memberId, kontoId);
 
         // Audit log member removal
+        String ipAddress = auditLogService.extractIpAddress(httpRequest);
         auditLogService.logSuccess(
                 AuditAction.KONTO_MEMBER_REMOVED,
                 AuditEntityType.KONTO_MEMBER,
                 memberId,
                 user,
-                null,
+                ipAddress,
                 String.format("Member %s removed from konto %s%s", targetMembership.getUser().getEmail(), konto.getIban(), isSelfRemoval ? " (self-removal)" : "")
         );
     }
