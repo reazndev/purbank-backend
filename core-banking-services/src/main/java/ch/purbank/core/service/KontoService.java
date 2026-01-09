@@ -246,6 +246,7 @@ public class KontoService {
         }
 
         if (request.getName() != null && !request.getName().isBlank()) {
+            validateKontoName(request.getName());
             konto.setName(request.getName());
         }
 
@@ -618,6 +619,7 @@ public class KontoService {
         StringBuilder auditDetails = new StringBuilder();
 
         if (request.getName() != null && !request.getName().isBlank()) {
+            validateKontoName(request.getName());
             auditDetails.append("name changed to '").append(request.getName()).append("'; ");
             konto.setName(request.getName());
         }
