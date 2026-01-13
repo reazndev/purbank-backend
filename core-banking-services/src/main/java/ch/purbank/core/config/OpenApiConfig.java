@@ -7,13 +7,26 @@ import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
 @Configuration
+@ConditionalOnProperty(
+        name = "springdoc.swagger-ui.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class OpenApiConfig {
+
+    @Value("${server.port:8080}")
+    private String serverPort;
+
+    @Value("${application.swagger.prod-url:https://ebanking.purbank.ch}")
+    private String prodUrl;
 
     @Bean
     public OpenAPI purbankOpenAPI() {
@@ -29,11 +42,11 @@ public class OpenApiConfig {
                                 .email("dev@purbank.ch")))
                 .servers(List.of(
                         new Server()
-                                .url("http://localhost:8080")
+                                .url("http://localhost:" + serverPort)
                                 .description("Development Server"),
                         new Server()
-                                .url("https://ebanking.purbank.ch")
-                                .description("Prod Server")))
+                                .url(prodUrl)
+                                .description("Production Server")))
                 .addSecurityItem(new SecurityRequirement()
                         .addList(securitySchemeName))
                 .components(new Components()
