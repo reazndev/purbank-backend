@@ -57,7 +57,7 @@ services:
       JWT_REFRESH_ABSOLUTE_EXPIRATION: ${JWT_REFRESH_ABSOLUTE_EXPIRATION:-43200000}
 
       # Server Configuration
-      SERVER_PORT: 8080
+      SERVER_PORT: ${SERVER_PORT:-8080}
 
       # Security Configuration
       CORS_ENABLE: ${CORS_ENABLE:-false}
