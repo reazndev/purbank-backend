@@ -97,7 +97,7 @@ jobs:
       # Feature: PR Comment (The "Killer Feature" from your Docker workflow)
       - name: Comment on PR with Test Results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const buildStatus = '${{ job.status }}' === 'success' ? '✅ Passed' : '❌ Failed';
