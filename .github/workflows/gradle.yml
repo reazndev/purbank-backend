@@ -46,6 +46,7 @@ jobs:
         with:
            # Fail if the build wrapper file has changed (security feature)
            gradle-version: wrapper
+           build-root-directory: core-banking-services
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
