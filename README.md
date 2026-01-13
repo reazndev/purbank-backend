@@ -1,5 +1,5 @@
 # Purbank
-The Purbank Core Backend Server. It exposes it's API under /api. Please refer to https://github.com/reazndev/purbank-meta for complete Installation Instructions for all required services.
+The Purbank Core Backend Server. It exposes its API under /api. Please refer to https://github.com/reazndev/purbank-meta for complete Installation Instructions for all required services.
 
 Setup in VScode:
 - Install Extension Pack for Java from Microsoft or vscode team and Spring Boot Extension Pack by VMware
