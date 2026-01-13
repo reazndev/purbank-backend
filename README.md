@@ -1,63 +1,104 @@
 # Purbank
+The Purbank Core Backend Server. It exposes it's API under /api. Please refer to https://github.com/reazndev/purbank-meta for complete Installation Instructions for all required services.
 
 Setup in VScode:
-- install Exteension Pack for Java from Microsoft or vscode team and Spring Boot Extension Pack by VMware
+- Install Extension Pack for Java from Microsoft or vscode team and Spring Boot Extension Pack by VMware
 
-make sure java is set up in your vscode settings
+Make sure Java is set up in your VSCode settings.
 
 To run:
-- Go into vscode, open spring boot dashboard and click run
+- Go into VSCode, open Spring Boot dashboard and click run
 
-## OpenAPI 
-run it, go to http://localhost:8080/swagger-ui
+## OpenAPI
+Run it, go to http://localhost:8080/swagger-ui
 
-## PostgresSQL (when building manually)
-A docker compose file is provided for easy development and testing. To use it just do:
-cd dev-postgres
-sudo docker-compose up -d
-! More details in dev-postgres/SETUP.md
+## Environment Configuration
 
-The DB is auto set up to just work with the application, no configuration needed. Just run it and you're ready to go.
+### Creating the .env file
 
-## Run the full backend using Docker compose
-For testing and development where building it yourself is not needed you can use the docker compose file provided. It is setup to pull from the latest successful build of the main branch. You can also use images from branches or PRs, see below for more details.
+Before running the application, you need to create a `.env` file in the project root:
 
-The easiest way to run the entire Purbank stack is using Docker Compose. This will start:
+1. Copy the `.env.example` file to `.env`:
+```bash
+   cp .env.example .env
+```
 
+2. **REQUIRED**: Fill in these critical values:
+    - `MAIL_PASSWORD` - Password for the no-reply@purbank.ch account
+        - Development password available at: https://cloud.hilfikers.com/f/1498293
+        - Note: The server will start just fine but you won't be able to send emails to users.
+    - `JWT_SECRET_KEY` - A secure random string (minimum 32 characters)
+        - Generate one with: `openssl rand -base64 32`
+
+3. **OPTIONAL**: Customize other values as needed for your environment
+
+### Environment Variables
+
+The application uses environment variables for configuration. All variables have sensible defaults for development except:
+
+**Required Variables:**
+- `MAIL_PASSWORD` - Mail server authentication password
+- `JWT_SECRET_KEY` - Secret key for JWT token signing (32+ characters)
+
+See `.env.example` for a complete list with descriptions.
+
+## PostgreSQL (when building manually)
+A docker compose file is provided for easy development and testing. To use it:
+```bash
+docker compose up -d
+```
+
+The DB is auto set up to work with the application, no configuration needed. Just run it and you're ready to go.
+
+## Run the full backend using Docker Compose
+
+For testing and development where building it yourself is not needed, you can use the docker compose file provided. It is set up to pull from the latest successful build of the main branch.
+
+### Prerequisites
+
+1. Copy the docker-compose.yml file from the repo.
+2. **Create a .env file** (see Environment Configuration section above)
+
+
+### Starting the Stack
+
+The Docker Compose setup will start:
 - PostgreSQL database
-- PgAdmin (database management UI)
 - Purbank backend API (latest main branch from GitHub Container Registry)
-
-You can set the environment variables like this:
 ```bash
-   export MAIL_PASSWORD="your-mail-password"
-   export JWT_SECRET_KEY="32-PLUS-CHAR-RANDOM-SECURE-JWT_SECRET"
+docker compose pull
+docker compose up -d
 ```
 
-or also just directly overwrite them in the docker compose for testing/dev.
+### Accessing Services
 
-Then start the server:
+- Backend API: http://localhost:8080
+- OpenAPI/Swagger: http://localhost:8080/swagger-ui
+- PostgreSQL: localhost:5432
 
+### Stopping the Stack
 ```bash
-   sudo docker compose pull
-   sudo docker compose up -d
+docker compose down
 ```
 
-NOTE: you need to authenticate using a github token to pull as the repo is currently private. See: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry (you only need to give read:packages permission)
+To also remove volumes (clears database):
+```bash
+docker compose down -v
+```
 
-## Docker builds
-Docker images of the backend get automatically built for:
-- the main branch (use `:main` and `:latest`)
-- any other branch (use `:{branch-name}`)
-- any PR with the preview label (use `:pr-{number}`)
-- also version tags and specific tags as needed.
+## Docker Builds
+
+Docker images of the backend are automatically built for:
+- The main branch (use `:main` and `:latest`)
+- Any other branch (use `:{branch-name}`)
+- Any PR with the preview label (use `:pr-{number}`)
+- Version tags and specific tags as needed
 
 ## Email Service
 
 The application sends emails to users throughout the registration process and for notifications:
 - Email verification codes during mobile device registration
 - Registration success confirmations
-- System notifications
 
 ### Configuration
 
@@ -65,9 +106,9 @@ The application sends emails to users throughout the registration process and fo
 
 The application is pre-configured to use Hilfiker Cloud Mail (`mail.hilfikernet.ch`) with the `no-reply@purbank.ch` account.
 
-To enable email functionality, set the mail password as an environment variable:
+To enable email functionality, set the mail password in your `.env` file:
 ```bash
-export MAIL_PASSWORD="your-password-here"
+MAIL_PASSWORD=your-password-here
 ```
 
 **Development Credentials**

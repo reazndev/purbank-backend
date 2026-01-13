@@ -3,9 +3,9 @@ spring:
     name: core-banking-services
   
   datasource:
-    url: jdbc:postgresql://localhost:5432/purbank
-    username: purbank_user
-    password: dev_password
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:purbank}
+    username: ${DB_USERNAME:purbank_user}
+    password: ${DB_PASSWORD:dev_password}
     driver-class-name: org.postgresql.Driver
   
   jpa:
@@ -25,12 +25,12 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_AUTH:true}
           ssl:
-            enable: true
+            enable: ${MAIL_SSL:true}
             trust: ${MAIL_HOST:mail.hilfikernet.ch}
           socketFactory:
-            port: 465
+            port: ${MAIL_PORT:465}
             class: javax.net.ssl.SSLSocketFactory
             fallback: false
           connectiontimeout: 60000
@@ -39,27 +39,37 @@ spring:
         debug: ${MAIL_DEBUG:false}
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    path: /swagger-ui
 
 logging:
   level:
-    ch.purbank: DEBUG
+    ch.purbank: ${LOG_LEVEL:DEBUG}
 
 application:
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
-      expiration: 900000           # 15 minutes
+      expiration: ${JWT_EXPIRATION:900000}           # 15 minutes
       refresh-token:
-        expiration: 1200000         # 20 minutes (inactivity timeout)
-        absolute-expiration: 43200000  # 12 hours (max lifetime)
+        expiration: ${JWT_REFRESH_EXPIRATION:1200000}         # 20 minutes (inactivity timeout)
+        absolute-expiration: ${JWT_REFRESH_ABSOLUTE_EXPIRATION:43200000}  # 12 hours (max lifetime)
     cors:
       enabled: ${CORS_ENABLE:false}
 
+  swagger:
+    prod-url: ${SWAGGER_PROD_URL:https://ebanking.purbank.ch}
+
 purbank:
   mail:
-    from: no-reply@purbank.ch
-    from-name: Purbank
-    verification-subject: Verify Your Email - Purbank Registration
-    success-subject: Welcome to Purbank!
-
+    from: ${MAIL_FROM:no-reply@purbank.ch}
+    from-name: ${MAIL_FROM_NAME:Purbank}
+    verification-subject: ${MAIL_VERIFICATION_SUBJECT:Verify Your Email - Purbank Registration}
+    success-subject: ${MAIL_SUCCESS_SUBJECT:Welcome to Purbank!}
