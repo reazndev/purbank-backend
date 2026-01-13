@@ -19,6 +19,9 @@ jobs:
   build:
     name: Build and Test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./core-banking-services
     
     # Run on all Pushes, all Dispatch, or PRs (standard CI practice is to run tests on ALL PRs, unlike Docker which might only be for previews)
     if: |
